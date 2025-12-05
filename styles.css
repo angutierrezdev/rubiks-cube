@@ -1,0 +1,121 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+body {
+    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    overflow: hidden;
+}
+#container {
+    width: 100vw;
+    height: 100vh;
+}
+#controls {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+button {
+    padding: 12px 24px;
+    font-size: 16px;
+    font-weight: bold;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+#scrambleBtn {
+    background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+    color: white;
+}
+#scrambleBtn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(238, 90, 36, 0.4);
+}
+#solveBtn {
+    background: linear-gradient(135deg, #4ecdc4, #44bd32);
+    color: white;
+}
+#solveBtn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(68, 189, 50, 0.4);
+}
+#resetBtn {
+    background: linear-gradient(135deg, #74b9ff, #0984e3);
+    color: white;
+}
+#resetBtn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(9, 132, 227, 0.4);
+}
+button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+}
+#status {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    color: white;
+    font-size: 14px;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 10px 15px;
+    border-radius: 8px;
+}
+#instructions {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    color: white;
+    font-size: 12px;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 15px;
+    border-radius: 8px;
+    max-width: 200px;
+}
+#instructions h3 {
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+#instructions p {
+    margin: 5px 0;
+    opacity: 0.8;
+}
+
+/* AI test banner */
+#ai-test-banner {
+    position: fixed;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 200;
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(6px);
+    padding: 10px 18px;
+    border-radius: 10px;
+    font-size: 13px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+    max-width: 80%;
+    text-align: center;
+    line-height: 1.2;
+}
+@media (max-width: 600px) {
+    #ai-test-banner {
+        font-size: 12px;
+        top: 10px;
+        padding: 8px 12px;
+    }
+    #instructions {
+        display: none;
+    }
+}
