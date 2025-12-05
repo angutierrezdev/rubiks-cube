@@ -4,6 +4,8 @@ const scrambleBtn = document.getElementById('scrambleBtn');
 const solveBtn = document.getElementById('solveBtn');
 const resetBtn = document.getElementById('resetBtn');
 const statusEl = document.getElementById('status');
+const frontFaceColorEl = document.getElementById('front-face-color');
+const frontFaceNameEl = document.getElementById('front-face-name');
 
 // Scene setup
 const scene = new THREE.Scene();
@@ -416,3 +418,88 @@ function render() {
 // Initialize and start
 initCube();
 render();
+
+// Face color names and hex values for the indicator
+const FACE_COLORS = {
+    'white': { hex: '#ffffff', name: 'White' },
+    'yellow': { hex: '#ffff00', name: 'Yellow' },
+    'red': { hex: '#ff0000', name: 'Red' },
+    'orange': { hex: '#ff8c00', name: 'Orange' },
+    'blue': { hex: '#0000ff', name: 'Blue' },
+    'green': { hex: '#00ff00', name: 'Green' }
+};
+
+// Determine which face is currently facing front based on cube rotation
+function getCurrentFrontFace() {
+    // Get the rotation of the cube group
+    const rotation = cubeGroup.rotation;
+    
+    // Create a vector pointing in the -Z direction (towards camera from cube's perspective)
+    // We need to find which original face is now closest to facing the camera
+    const frontVector = new THREE.Vector3(0, 0, 1);
+    
+    // Create a quaternion from the cube's rotation
+    const quaternion = new THREE.Quaternion();
+    quaternion.setFromEuler(rotation);
+    
+    // Invert to get from world to local
+    const inverseQuaternion = quaternion.clone().invert();
+    
+    // Transform the front vector by the inverse rotation to find which local axis is pointing towards camera
+    frontVector.applyQuaternion(inverseQuaternion);
+    
+    // Find which axis has the largest component
+    const absX = Math.abs(frontVector.x);
+    const absY = Math.abs(frontVector.y);
+    const absZ = Math.abs(frontVector.z);
+    
+    if (absZ >= absX && absZ >= absY) {
+        // Z axis is dominant
+        return frontVector.z > 0 ? 'blue' : 'green';
+    } else if (absX >= absY) {
+        // X axis is dominant
+        return frontVector.x > 0 ? 'red' : 'orange';
+    } else {
+        // Y axis is dominant
+        return frontVector.y > 0 ? 'white' : 'yellow';
+    }
+}
+
+// Update the front face indicator
+function updateFrontFaceIndicator() {
+    const face = getCurrentFrontFace();
+    const faceInfo = FACE_COLORS[face];
+    frontFaceColorEl.style.backgroundColor = faceInfo.hex;
+    frontFaceNameEl.textContent = faceInfo.name;
+}
+
+// Call update on mouse/touch movements
+container.addEventListener('mousemove', () => {
+    if (isDragging) {
+        updateFrontFaceIndicator();
+    }
+});
+
+container.addEventListener('touchmove', () => {
+    if (isDragging) {
+        updateFrontFaceIndicator();
+    }
+});
+
+// Keyboard controls
+document.addEventListener('keydown', (e) => {
+    // Ignore if typing in an input field
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    
+    const key = e.key.toUpperCase();
+    const validMoves = ['R', 'U', 'D', 'L', 'F', 'B'];
+    
+    if (validMoves.includes(key)) {
+        e.preventDefault();
+        const moveName = e.shiftKey ? key + "'" : key;
+        executeMove(moveName, true);
+    }
+});
+
+// Initialize the front face indicator
+updateFrontFaceIndicator();
