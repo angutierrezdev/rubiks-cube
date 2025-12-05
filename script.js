@@ -925,8 +925,9 @@ function calculateTouchRotationAngle(deltaX, deltaY, axis, layer, cubiePos) {
     const screenDist = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
     
     // The sign of alignment tells us the rotation direction
-    // We also need to account for the layer (1 or -1)
-    const angle = screenDist * TOUCH_ROTATION_SPEED * Math.sign(alignment) * layer;
+    // The geometry (cross product) already accounts for the layer position,
+    // so we don't need to multiply by layer here
+    const angle = screenDist * TOUCH_ROTATION_SPEED * Math.sign(alignment);
     
     return angle;
 }
