@@ -271,14 +271,17 @@
             isAnimating = true;
             const faceCubies = getCubiesOnFace(axis, layer);
             
-            // Create a temporary group for rotation
+            // Create a temporary group for rotation as a child of cubeGroup
+            // This ensures rotations work correctly even when cubeGroup is rotated by user
             const rotationGroup = new THREE.Group();
-            scene.add(rotationGroup);
+            cubeGroup.add(rotationGroup);
             
-            // Add cubies to rotation group
+            // Add cubies to rotation group, preserving their local positions
             faceCubies.forEach(cubie => {
+                const localPos = cubie.position.clone();
                 cubeGroup.remove(cubie);
                 rotationGroup.add(cubie);
+                cubie.position.copy(localPos);
             });
 
             const angle = direction * Math.PI / 2;
@@ -311,9 +314,9 @@
                 } else {
                     // Animation complete - update cubie positions
                     faceCubies.forEach(cubie => {
-                        // Apply the rotation to the cubie's position
-                        const pos = cubie.position.clone();
-                        rotationGroup.localToWorld(pos);
+                        // Get the cubie's position in cubeGroup's local space
+                        const pos = new THREE.Vector3();
+                        cubie.getWorldPosition(pos);
                         cubeGroup.worldToLocal(pos);
                         
                         // Round to nearest grid position
@@ -321,18 +324,24 @@
                         pos.y = Math.round(pos.y / totalSize) * totalSize;
                         pos.z = Math.round(pos.z / totalSize) * totalSize;
                         
-                        cubie.position.copy(pos);
+                        // Get the cubie's world quaternion before moving it
+                        const worldQuaternion = new THREE.Quaternion();
+                        cubie.getWorldQuaternion(worldQuaternion);
                         
-                        // Apply rotation to the cubie itself
-                        const quaternion = new THREE.Quaternion();
-                        rotationGroup.getWorldQuaternion(quaternion);
-                        cubie.quaternion.premultiply(quaternion);
-                        
+                        // Move cubie back to cubeGroup
                         rotationGroup.remove(cubie);
                         cubeGroup.add(cubie);
+                        
+                        // Set position and rotation
+                        cubie.position.copy(pos);
+                        
+                        // Convert world quaternion to local quaternion relative to cubeGroup
+                        const cubeGroupWorldQuaternion = new THREE.Quaternion();
+                        cubeGroup.getWorldQuaternion(cubeGroupWorldQuaternion);
+                        cubie.quaternion.copy(worldQuaternion).premultiply(cubeGroupWorldQuaternion.invert());
                     });
                     
-                    scene.remove(rotationGroup);
+                    cubeGroup.remove(rotationGroup);
                     
                     if (record) {
                         moveHistory.push({ axis, layer, direction });
