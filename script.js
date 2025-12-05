@@ -50,6 +50,11 @@ const cubeSize = 1;
 const gap = 0.05;
 const totalSize = cubeSize + gap;
 
+// Touch rotation constants
+const TOUCH_ROTATION_SPEED = 0.004; // Per pixel - ~400px swipe = 90° turn (π/2 radians)
+const CENTER_CUBIE_THRESHOLD = 0.01; // Distance threshold to consider a cubie on the rotation axis
+const TANGENT_ALIGNMENT_THRESHOLD = 0.1; // Threshold for tangent vector magnitude
+
 // Move history for solving
 let moveHistory = [];
 let isAnimating = false;
@@ -504,42 +509,45 @@ function getFaceFromTouch(touch) {
     if (intersects.length > 0) {
         const intersect = intersects[0];
         const cubie = intersect.object;
-        const normal = intersect.face.normal.clone();
         
         // Get local normal (before transformation) for face index determination
         const localNormal = intersect.face.normal.clone();
         
-        // Transform normal to world space for axis/layer calculation
-        normal.transformDirection(cubie.matrixWorld);
-        
         // Get the cubie's position in cubeGroup's local space
         const cubiePos = cubie.position.clone();
         
-        // Determine which face of the cubie was hit
-        // The normal points outward from the face
-        const absX = Math.abs(normal.x);
-        const absY = Math.abs(normal.y);
-        const absZ = Math.abs(normal.z);
+        // Transform the face normal to cubeGroup's local space (not world space)
+        // This ensures axis/layer determination works correctly regardless of cube rotation
+        const normalInCubeSpace = localNormal.clone();
+        
+        // Transform from cubie's local space to cubeGroup's local space
+        // We need to apply the cubie's rotation (which changes as layers rotate)
+        normalInCubeSpace.applyQuaternion(cubie.quaternion);
+        
+        // Determine which face of the cube was hit based on normal in cube's local space
+        const absX = Math.abs(normalInCubeSpace.x);
+        const absY = Math.abs(normalInCubeSpace.y);
+        const absZ = Math.abs(normalInCubeSpace.z);
         
         let axis, layer;
         if (absX >= absY && absX >= absZ) {
             axis = 'x';
-            layer = normal.x > 0 ? 1 : -1;
+            layer = normalInCubeSpace.x > 0 ? 1 : -1;
         } else if (absY >= absZ) {
             axis = 'y';
-            layer = normal.y > 0 ? 1 : -1;
+            layer = normalInCubeSpace.y > 0 ? 1 : -1;
         } else {
             axis = 'z';
-            layer = normal.z > 0 ? 1 : -1;
+            layer = normalInCubeSpace.z > 0 ? 1 : -1;
         }
         
-        // Check if this is an edge cubie (has a face on this layer)
+        // Check if this cubie is on the determined layer
         const faceCubies = getCubiesOnFace(axis, layer);
         if (faceCubies.includes(cubie)) {
-            // Store both local normal (for highlighting) and world normal (for rotation calculation)
-            const worldNormal = normal.clone(); // Already transformed to world space
-            // Get cubie position to identify which edge piece it is
-            const cubiePos = cubie.position.clone();
+            // Transform normal to world space for rotation calculations
+            const worldNormal = intersect.face.normal.clone();
+            worldNormal.transformDirection(cubie.matrixWorld);
+            
             return { axis, layer, cubie, normal: localNormal, worldNormal: worldNormal, cubiePos: cubiePos };
         }
     }
@@ -845,6 +853,85 @@ function calculateSimpleSwipeDirection(deltaX, deltaY, axis, layer) {
     return angle;
 }
 
+// Calculate rotation angle from touch swipe using proper 3D geometry
+// This correctly handles all faces and all positions on each face
+function calculateTouchRotationAngle(deltaX, deltaY, axis, layer, cubiePos) {
+    // Get the rotation axis in world space
+    let rotationAxisLocal = new THREE.Vector3();
+    if (axis === 'x') rotationAxisLocal.set(1, 0, 0);
+    else if (axis === 'y') rotationAxisLocal.set(0, 1, 0);
+    else rotationAxisLocal.set(0, 0, 1);
+    
+    // Transform rotation axis to world space
+    const rotationAxisWorld = rotationAxisLocal.clone().transformDirection(cubeGroup.matrixWorld);
+    
+    // Get the cubie's world position
+    const cubieWorldPos = cubiePos.clone();
+    cubeGroup.localToWorld(cubieWorldPos);
+    
+    // Project the cubie position onto screen space to get the touch point
+    const screenPoint = cubieWorldPos.clone().project(camera);
+    
+    // Create a point offset by the swipe delta in screen space
+    const screenPointMoved = new THREE.Vector3(
+        screenPoint.x + (deltaX / window.innerWidth) * 2,
+        screenPoint.y - (deltaY / window.innerHeight) * 2,
+        screenPoint.z
+    );
+    
+    // Unproject both points to world space at the cubie's depth
+    const worldPoint = screenPoint.clone().unproject(camera);
+    const worldPointMoved = screenPointMoved.clone().unproject(camera);
+    
+    // Calculate the swipe direction in world space
+    const swipeDir = new THREE.Vector3().subVectors(worldPointMoved, worldPoint).normalize();
+    
+    // Get the vector from rotation axis center to cubie position in world space
+    // The axis center is the center of the face being rotated, on the rotation axis
+    const axisCenter = new THREE.Vector3();
+    if (axis === 'x') axisCenter.set(layer * totalSize, 0, 0);
+    else if (axis === 'y') axisCenter.set(0, layer * totalSize, 0);
+    else axisCenter.set(0, 0, layer * totalSize);
+    cubeGroup.localToWorld(axisCenter);
+    
+    // Vector from axis center to cubie
+    const radiusVec = new THREE.Vector3().subVectors(cubieWorldPos, axisCenter);
+    
+    // For center cubies (on the rotation axis), radiusVec is zero or very small
+    // In this case, we need a different approach: use the camera's view direction
+    const radiusLength = radiusVec.length();
+    let tangent;
+    
+    if (radiusLength < CENTER_CUBIE_THRESHOLD) {
+        // Center cubie - create a tangent based on camera right direction
+        // The camera's right direction projected onto the face gives us a reasonable tangent
+        const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+        // Make tangent perpendicular to the rotation axis
+        tangent = new THREE.Vector3().crossVectors(rotationAxisWorld, cameraRight).normalize();
+        // If the cross product is too small (rotation axis aligned with camera right), use camera up
+        if (tangent.length() < TANGENT_ALIGNMENT_THRESHOLD) {
+            const cameraUp = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+            tangent = new THREE.Vector3().crossVectors(rotationAxisWorld, cameraUp).normalize();
+        }
+    } else {
+        // Normal case - calculate tangent from cross product
+        tangent = new THREE.Vector3().crossVectors(rotationAxisWorld, radiusVec).normalize();
+    }
+    
+    // The rotation magnitude should be based on how much the swipe aligns with the tangent
+    const alignment = swipeDir.dot(tangent);
+    
+    // Calculate angle based on screen distance and alignment
+    const screenDist = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    
+    // The sign of alignment tells us the rotation direction
+    // The geometry (cross product) already accounts for the layer position,
+    // so we don't need to multiply by layer here
+    const angle = screenDist * TOUCH_ROTATION_SPEED * Math.sign(alignment);
+    
+    return angle;
+}
+
 container.addEventListener('touchstart', (e) => {
     e.preventDefault();
     
@@ -924,97 +1011,17 @@ container.addEventListener('touchmove', (e) => {
             const screenLength = Math.sqrt(totalDeltaX * totalDeltaX + totalDeltaY * totalDeltaY);
             
             if (screenLength > 2) {
-                // Use simpler, more direct calculation
-                const { axis, layer, worldNormal, cubiePos } = faceInfo;
-                const rotationSpeed = 0.004; // Per pixel - ~400px swipe = 90° turn (π/2 radians)
-                let angle = 0;
+                const { axis, layer, cubiePos } = faceInfo;
                 
-                // Determine rotation based on dominant swipe direction
-                // For front face (z=1, layer=1): Top and Left middle squares need direction correction
-                let extraFlip = 1;
-                
-                if (axis === 'z' && layer === 1) {
-                    // Front face - identify which edge piece we're touching
-                    const tolerance = 0.1;
-                    // Top edge: y=1, x=0 (middle of top row)
-                    const isTopEdge = Math.abs(cubiePos.y - totalSize) < tolerance && Math.abs(cubiePos.x) < tolerance;
-                    // Bottom edge: y=-1, x=0 (middle of bottom row)
-                    const isBottomEdge = Math.abs(cubiePos.y + totalSize) < tolerance && Math.abs(cubiePos.x) < tolerance;
-                    // Right edge: x=1, y=0 (middle of right column)
-                    const isRightEdge = Math.abs(cubiePos.x - totalSize) < tolerance && Math.abs(cubiePos.y) < tolerance;
-                    // Left edge: x=-1, y=0 (middle of left column)
-                    const isLeftEdge = Math.abs(cubiePos.x + totalSize) < tolerance && Math.abs(cubiePos.y) < tolerance;
-                    
-                    if (Math.abs(totalDeltaX) > Math.abs(totalDeltaY)) {
-                        // Horizontal swipe - Left edge needs flip, Right edge works correctly
-                        if (isLeftEdge) {
-                            extraFlip = -1;
-                        }
-                        // isRightEdge works correctly, no flip needed
-                    } else {
-                        // Vertical swipe - Top edge needs flip, Bottom edge works correctly
-                        if (isTopEdge) {
-                            extraFlip = -1;
-                        }
-                        // isBottomEdge works correctly, no flip needed
-                    }
-                }
-                
-                if (Math.abs(totalDeltaX) > Math.abs(totalDeltaY)) {
-                    // Horizontal swipe
-                    if (axis === 'y') {
-                        // Rotating around Y axis (U/D faces) - horizontal swipe rotates
-                        const flip = worldNormal.z > 0 ? 1 : -1;
-                        angle = totalDeltaX * rotationSpeed * layer * flip;
-                    } else if (axis === 'z') {
-                        // Rotating around Z axis (F/B faces) - horizontal swipe rotates
-                        const baseFlip = worldNormal.y > 0 ? 1 : -1;
-                        // Apply extraFlip only for Left edge (Right edge works correctly)
-                        let finalFlip = baseFlip;
-                        if (axis === 'z' && layer === 1) {
-                            const tolerance = 0.1;
-                            const isLeftEdge = Math.abs(cubiePos.x + totalSize) < tolerance && Math.abs(cubiePos.y) < tolerance;
-                            const isRightEdge = Math.abs(cubiePos.x - totalSize) < tolerance && Math.abs(cubiePos.y) < tolerance;
-                            if (isLeftEdge) {
-                                finalFlip = baseFlip * -1; // Flip for Left edge
-                            } else if (isRightEdge) {
-                                finalFlip = baseFlip; // No flip for Right edge (works correctly)
-                            }
-                        }
-                        angle = totalDeltaX * rotationSpeed * layer * finalFlip;
-                    } else {
-                        // Rotating around X axis (R/L faces) - horizontal swipe rotates
-                        const flip = worldNormal.z > 0 ? 1 : -1;
-                        angle = totalDeltaX * rotationSpeed * layer * flip;
-                    }
-                } else {
-                    // Vertical swipe
-                    if (axis === 'x') {
-                        // Rotating around X axis (R/L faces) - vertical swipe rotates
-                        const flip = worldNormal.y > 0 ? 1 : -1;
-                        angle = -totalDeltaY * rotationSpeed * layer * flip;
-                    } else if (axis === 'y') {
-                        // Rotating around Y axis (U/D faces) - vertical swipe rotates
-                        const flip = worldNormal.x > 0 ? 1 : -1;
-                        angle = -totalDeltaY * rotationSpeed * layer * flip;
-                    } else {
-                        // Rotating around Z axis (F/B faces) - vertical swipe rotates
-                        const baseFlip = worldNormal.x > 0 ? 1 : -1;
-                        // Apply extraFlip only for Top edge (Bottom edge works correctly)
-                        let finalFlip = baseFlip;
-                        if (axis === 'z' && layer === 1) {
-                            const tolerance = 0.1;
-                            const isTopEdge = Math.abs(cubiePos.y - totalSize) < tolerance && Math.abs(cubiePos.x) < tolerance;
-                            const isBottomEdge = Math.abs(cubiePos.y + totalSize) < tolerance && Math.abs(cubiePos.x) < tolerance;
-                            if (isTopEdge) {
-                                finalFlip = baseFlip * -1; // Flip for Top edge
-                            } else if (isBottomEdge) {
-                                finalFlip = baseFlip; // No flip for Bottom edge (works correctly)
-                            }
-                        }
-                        angle = -totalDeltaY * rotationSpeed * layer * finalFlip;
-                    }
-                }
+                // Calculate angle using proper 3D geometry
+                // This works for all faces and all positions on each face
+                const angle = calculateTouchRotationAngle(
+                    totalDeltaX, 
+                    totalDeltaY, 
+                    axis, 
+                    layer, 
+                    cubiePos
+                );
                 
                 // Set rotation directly based on total swipe distance
                 touchState.currentRotation = angle;
