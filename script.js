@@ -4,6 +4,8 @@ const scrambleBtn = document.getElementById('scrambleBtn');
 const solveBtn = document.getElementById('solveBtn');
 const resetBtn = document.getElementById('resetBtn');
 const statusEl = document.getElementById('status');
+const frontFaceColorEl = document.getElementById('front-face-color');
+const frontFaceNameEl = document.getElementById('front-face-name');
 
 // Scene setup
 const scene = new THREE.Scene();
@@ -416,3 +418,130 @@ function render() {
 // Initialize and start
 initCube();
 render();
+
+// Face color names and hex values for the indicator
+const FACE_COLORS = {
+    'white': { hex: '#ffffff', name: 'White' },
+    'yellow': { hex: '#ffff00', name: 'Yellow' },
+    'red': { hex: '#ff0000', name: 'Red' },
+    'orange': { hex: '#ff8c00', name: 'Orange' },
+    'blue': { hex: '#0000ff', name: 'Blue' },
+    'green': { hex: '#00ff00', name: 'Green' }
+};
+
+// Helper to get inverse quaternion from cube rotation
+function getCubeInverseQuaternion() {
+    const rotation = cubeGroup.rotation;
+    const quaternion = new THREE.Quaternion();
+    quaternion.setFromEuler(rotation);
+    return quaternion.invert();
+}
+
+// Helper to determine which face a transformed vector points to
+function getFaceFromVector(vec) {
+    const absX = Math.abs(vec.x);
+    const absY = Math.abs(vec.y);
+    const absZ = Math.abs(vec.z);
+    
+    if (absZ >= absX && absZ >= absY) {
+        return { color: vec.z > 0 ? 'blue' : 'green', move: vec.z > 0 ? 'F' : 'B' };
+    } else if (absX >= absY) {
+        return { color: vec.x > 0 ? 'red' : 'orange', move: vec.x > 0 ? 'R' : 'L' };
+    } else {
+        return { color: vec.y > 0 ? 'white' : 'yellow', move: vec.y > 0 ? 'U' : 'D' };
+    }
+}
+
+// Determine which face is currently facing front based on cube rotation
+function getCurrentFrontFace() {
+    const frontVector = new THREE.Vector3(0, 0, 1);
+    frontVector.applyQuaternion(getCubeInverseQuaternion());
+    return getFaceFromVector(frontVector).color;
+}
+
+// Update the front face indicator
+function updateFrontFaceIndicator() {
+    const face = getCurrentFrontFace();
+    const faceInfo = FACE_COLORS[face];
+    frontFaceColorEl.style.backgroundColor = faceInfo.hex;
+    frontFaceNameEl.textContent = faceInfo.name;
+}
+
+// Call update on mouse/touch movements
+container.addEventListener('mousemove', () => {
+    if (isDragging) {
+        updateFrontFaceIndicator();
+    }
+});
+
+container.addEventListener('touchmove', () => {
+    if (isDragging) {
+        updateFrontFaceIndicator();
+    }
+});
+
+// Get the current face orientation based on cube rotation
+// Returns an object mapping relative directions to actual cube faces
+function getCurrentFaceMapping() {
+    const inverseQuaternion = getCubeInverseQuaternion();
+    
+    // Define the 6 direction vectors
+    const directions = {
+        front: new THREE.Vector3(0, 0, 1),
+        back: new THREE.Vector3(0, 0, -1),
+        right: new THREE.Vector3(1, 0, 0),
+        left: new THREE.Vector3(-1, 0, 0),
+        up: new THREE.Vector3(0, 1, 0),
+        down: new THREE.Vector3(0, -1, 0)
+    };
+    
+    // Transform each direction to find which original face is in that position
+    const mapping = {};
+    
+    for (const [dir, vec] of Object.entries(directions)) {
+        const transformed = vec.clone().applyQuaternion(inverseQuaternion);
+        mapping[dir] = getFaceFromVector(transformed).move;
+    }
+    
+    return mapping;
+}
+
+// Static mapping of keyboard keys to relative directions
+const KEY_TO_RELATIVE = {
+    'F': 'front',
+    'B': 'back',
+    'R': 'right',
+    'L': 'left',
+    'U': 'up',
+    'D': 'down'
+};
+
+// Map keyboard input to actual move based on current orientation
+function getOrientedMove(key, isPrime) {
+    const mapping = getCurrentFaceMapping();
+    const relativeDir = KEY_TO_RELATIVE[key];
+    if (!relativeDir) return null;
+    
+    const actualFace = mapping[relativeDir];
+    return isPrime ? actualFace + "'" : actualFace;
+}
+
+// Keyboard controls
+document.addEventListener('keydown', (e) => {
+    // Ignore if typing in an input field
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    
+    const key = e.key.toUpperCase();
+    const validMoves = ['R', 'U', 'D', 'L', 'F', 'B'];
+    
+    if (validMoves.includes(key)) {
+        e.preventDefault();
+        const moveName = getOrientedMove(key, e.shiftKey);
+        if (moveName) {
+            executeMove(moveName, true);
+        }
+    }
+});
+
+// Initialize the front face indicator
+updateFrontFaceIndicator();

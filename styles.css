@@ -90,6 +90,36 @@ button:disabled {
     margin: 5px 0;
     opacity: 0.8;
 }
+#instructions h4 {
+    margin-top: 10px;
+    margin-bottom: 5px;
+    font-size: 13px;
+}
+
+/* Front face indicator */
+#front-face-indicator {
+    position: fixed;
+    bottom: 60px;
+    left: 20px;
+    color: white;
+    font-size: 14px;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 10px 15px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+#front-face-color {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    border: 2px solid white;
+    background-color: #0000ff;
+}
+#front-face-name {
+    font-weight: bold;
+}
 
 /* AI test banner */
 #ai-test-banner {
