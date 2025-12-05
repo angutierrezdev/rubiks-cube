@@ -369,27 +369,788 @@ container.addEventListener('mouseleave', () => {
 });
 
 // Touch controls for mobile
+let touchState = {
+    lockTouch: null,      // First touch that locks the cube
+    swipeTouch: null,     // Second touch that swipes faces
+    isLocked: false,      // Whether cube rotation is locked
+    activeFaceRotation: null, // Current active face rotation state
+    swipeStartPos: null,  // Starting position of swipe (initial)
+    swipeInitialPos: null, // Initial touch position (for total distance calculation)
+    swipeStartFace: null, // Face being swiped
+    swipeAxis: null,      // Axis of rotation
+    swipeLayer: null,     // Layer being rotated
+    swipeDirection: null, // Direction of swipe
+    currentRotation: 0,   // Current rotation angle in radians
+    rotationGroup: null,  // Temporary group for rotation
+    highlightedCubie: null, // Currently highlighted cubie
+    originalMaterials: null // Original materials for restoration
+};
+
+// Raycaster for detecting which face is touched
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+// Highlight a cubie - only the touched face, dim others
+function highlightCubie(cubie, faceNormal) {
+    // Remove previous highlight
+    removeHighlight();
+    
+    if (!cubie) return;
+    
+    // Store reference and original material properties
+    touchState.highlightedCubie = cubie;
+    touchState.originalMaterials = [];
+    
+    // Get materials array (handle both single material and array)
+    const materials = Array.isArray(cubie.material) ? cubie.material : [cubie.material];
+    
+    // Determine which face index was touched based on normal
+    // Material order: [Right(+X), Left(-X), Up(+Y), Down(-Y), Front(+Z), Back(-Z)]
+    let touchedFaceIndex = -1;
+    if (faceNormal) {
+        const absX = Math.abs(faceNormal.x);
+        const absY = Math.abs(faceNormal.y);
+        const absZ = Math.abs(faceNormal.z);
+        
+        if (absX >= absY && absX >= absZ) {
+            touchedFaceIndex = faceNormal.x > 0 ? 0 : 1; // Right or Left
+        } else if (absY >= absZ) {
+            touchedFaceIndex = faceNormal.y > 0 ? 2 : 3; // Up or Down
+        } else {
+            touchedFaceIndex = faceNormal.z > 0 ? 4 : 5; // Front or Back
+        }
+    }
+    
+    // Store original properties and apply highlight
+    materials.forEach((material, index) => {
+        // Store original values
+        touchState.originalMaterials.push({
+            color: material.color.clone(),
+            emissive: material.emissive ? material.emissive.clone() : new THREE.Color(0x000000),
+            emissiveIntensity: material.emissiveIntensity !== undefined ? material.emissiveIntensity : 0
+        });
+        
+        if (index === touchedFaceIndex) {
+            // Highlight the touched face - lighten and add glow
+            const lightenedColor = new THREE.Color().lerpColors(
+                material.color,
+                new THREE.Color(0xffffff),
+                0.15
+            );
+            material.color.copy(lightenedColor);
+            
+            // Add subtle white emissive glow
+            if (!material.emissive) {
+                material.emissive = new THREE.Color(0x000000);
+            }
+            material.emissive.setHex(0xffffff);
+            material.emissiveIntensity = 0.4;
+        } else {
+            // Dim the other faces slightly
+            const dimmedColor = new THREE.Color().lerpColors(
+                material.color,
+                new THREE.Color(0x000000),
+                0.3
+            );
+            material.color.copy(dimmedColor);
+        }
+        
+        // Force material update
+        material.needsUpdate = true;
+    });
+    
+    // Ensure the mesh updates
+    cubie.material.needsUpdate = true;
+}
+
+// Remove highlighting from cubie
+function removeHighlight() {
+    if (touchState.highlightedCubie && touchState.originalMaterials) {
+        const cubie = touchState.highlightedCubie;
+        const materials = Array.isArray(cubie.material) ? cubie.material : [cubie.material];
+        
+        // Restore original material properties
+        materials.forEach((material, index) => {
+            if (touchState.originalMaterials[index]) {
+                const original = touchState.originalMaterials[index];
+                material.color.copy(original.color);
+                
+                // Restore emissive
+                if (material.emissive) {
+                    material.emissive.copy(original.emissive);
+                    material.emissiveIntensity = original.emissiveIntensity;
+                }
+                
+                material.needsUpdate = true;
+            }
+        });
+        
+        cubie.material.needsUpdate = true;
+        touchState.highlightedCubie = null;
+        touchState.originalMaterials = null;
+    }
+}
+
+// Get face information from a touch position
+function getFaceFromTouch(touch) {
+    mouse.x = (touch.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(touch.clientY / window.innerHeight) * 2 + 1;
+    
+    raycaster.setFromCamera(mouse, camera);
+    
+    // Check intersection with all cubies
+    const intersects = raycaster.intersectObjects(cubies, true);
+    
+    if (intersects.length > 0) {
+        const intersect = intersects[0];
+        const cubie = intersect.object;
+        const normal = intersect.face.normal.clone();
+        
+        // Get local normal (before transformation) for face index determination
+        const localNormal = intersect.face.normal.clone();
+        
+        // Transform normal to world space for axis/layer calculation
+        normal.transformDirection(cubie.matrixWorld);
+        
+        // Get the cubie's position in cubeGroup's local space
+        const cubiePos = cubie.position.clone();
+        
+        // Determine which face of the cubie was hit
+        // The normal points outward from the face
+        const absX = Math.abs(normal.x);
+        const absY = Math.abs(normal.y);
+        const absZ = Math.abs(normal.z);
+        
+        let axis, layer;
+        if (absX >= absY && absX >= absZ) {
+            axis = 'x';
+            layer = normal.x > 0 ? 1 : -1;
+        } else if (absY >= absZ) {
+            axis = 'y';
+            layer = normal.y > 0 ? 1 : -1;
+        } else {
+            axis = 'z';
+            layer = normal.z > 0 ? 1 : -1;
+        }
+        
+        // Check if this is an edge cubie (has a face on this layer)
+        const faceCubies = getCubiesOnFace(axis, layer);
+        if (faceCubies.includes(cubie)) {
+            // Store both local normal (for highlighting) and world normal (for rotation calculation)
+            const worldNormal = normal.clone(); // Already transformed to world space
+            // Get cubie position to identify which edge piece it is
+            const cubiePos = cubie.position.clone();
+            return { axis, layer, cubie, normal: localNormal, worldNormal: worldNormal, cubiePos: cubiePos };
+        }
+    }
+    
+    return null;
+}
+
+// Start face rotation with continuous control
+function startFaceRotation(axis, layer, startAngle = 0) {
+    if (touchState.rotationGroup) {
+        // Clean up existing rotation group
+        cubeGroup.remove(touchState.rotationGroup);
+    }
+    
+    const faceCubies = getCubiesOnFace(axis, layer);
+    touchState.rotationGroup = new THREE.Group();
+    cubeGroup.add(touchState.rotationGroup);
+    
+    faceCubies.forEach(cubie => {
+        const localPos = cubie.position.clone();
+        cubeGroup.remove(cubie);
+        touchState.rotationGroup.add(cubie);
+        cubie.position.copy(localPos);
+    });
+    
+    touchState.swipeAxis = axis;
+    touchState.swipeLayer = layer;
+    touchState.currentRotation = startAngle;
+    
+    // Set initial rotation
+    switch (axis) {
+        case 'x':
+            touchState.rotationGroup.rotation.x = startAngle;
+            break;
+        case 'y':
+            touchState.rotationGroup.rotation.y = startAngle;
+            break;
+        case 'z':
+            touchState.rotationGroup.rotation.z = startAngle;
+            break;
+    }
+}
+
+// Update face rotation during swipe
+function updateFaceRotation(deltaAngle) {
+    if (!touchState.rotationGroup || touchState.swipeAxis === null) return;
+    
+    touchState.currentRotation += deltaAngle;
+    
+    switch (touchState.swipeAxis) {
+        case 'x':
+            touchState.rotationGroup.rotation.x = touchState.currentRotation;
+            break;
+        case 'y':
+            touchState.rotationGroup.rotation.y = touchState.currentRotation;
+            break;
+        case 'z':
+            touchState.rotationGroup.rotation.z = touchState.currentRotation;
+            break;
+    }
+}
+
+// Complete face rotation - snap to nearest 90 degrees
+function completeFaceRotation() {
+    if (!touchState.rotationGroup || touchState.swipeAxis === null) return;
+    
+    const currentAngle = touchState.currentRotation;
+    // Snap to nearest 90 degrees (π/2)
+    const snapAngle = Math.round(currentAngle / (Math.PI / 2)) * (Math.PI / 2);
+    const remainingAngle = snapAngle - currentAngle;
+    
+    if (Math.abs(remainingAngle) < 0.01) {
+        // Already at snap position, just finalize
+        finalizeFaceRotation(snapAngle);
+    } else {
+        // Animate to snap position
+        const duration = 200;
+        const startTime = Date.now();
+        const startAngle = currentAngle;
+        
+        function animate() {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const eased = 1 - Math.pow(1 - progress, 3);
+            
+            const angle = startAngle + remainingAngle * eased;
+            touchState.currentRotation = angle;
+            
+            switch (touchState.swipeAxis) {
+                case 'x':
+                    touchState.rotationGroup.rotation.x = angle;
+                    break;
+                case 'y':
+                    touchState.rotationGroup.rotation.y = angle;
+                    break;
+                case 'z':
+                    touchState.rotationGroup.rotation.z = angle;
+                    break;
+            }
+            
+            if (progress < 1) {
+                requestAnimationFrame(animate);
+            } else {
+                finalizeFaceRotation(snapAngle);
+            }
+        }
+        
+        animate();
+    }
+}
+
+// Finalize the rotation and update cubie positions
+function finalizeFaceRotation(finalAngle) {
+    if (!touchState.rotationGroup || touchState.swipeAxis === null) return;
+    
+    // Apply final rotation to the group
+    switch (touchState.swipeAxis) {
+        case 'x':
+            touchState.rotationGroup.rotation.x = finalAngle;
+            break;
+        case 'y':
+            touchState.rotationGroup.rotation.y = finalAngle;
+            break;
+        case 'z':
+            touchState.rotationGroup.rotation.z = finalAngle;
+            break;
+    }
+    
+    const faceCubies = [];
+    touchState.rotationGroup.children.forEach(cubie => {
+        faceCubies.push(cubie);
+    });
+    
+    // Calculate how many quarter turns this represents
+    const quarterTurns = Math.round(finalAngle / (Math.PI / 2));
+    
+    // Update cubie positions
+    faceCubies.forEach(cubie => {
+        const pos = new THREE.Vector3();
+        cubie.getWorldPosition(pos);
+        cubeGroup.worldToLocal(pos);
+        
+        // Round to nearest grid position
+        pos.x = Math.round(pos.x / totalSize) * totalSize;
+        pos.y = Math.round(pos.y / totalSize) * totalSize;
+        pos.z = Math.round(pos.z / totalSize) * totalSize;
+        
+        const worldQuaternion = new THREE.Quaternion();
+        cubie.getWorldQuaternion(worldQuaternion);
+        
+        touchState.rotationGroup.remove(cubie);
+        cubeGroup.add(cubie);
+        
+        cubie.position.copy(pos);
+        
+        const cubeGroupWorldQuaternion = new THREE.Quaternion();
+        cubeGroup.getWorldQuaternion(cubeGroupWorldQuaternion);
+        const invertedQuaternion = cubeGroupWorldQuaternion.clone().invert();
+        cubie.quaternion.copy(worldQuaternion).premultiply(invertedQuaternion);
+    });
+    
+    cubeGroup.remove(touchState.rotationGroup);
+    touchState.rotationGroup = null;
+    
+    // Record the move if it was a full quarter turn
+    // Normalize quarterTurns to -1, 0, 1, 2, 3 (where 2 = 180°, 3 = -90°)
+    const normalizedTurns = ((quarterTurns % 4) + 4) % 4;
+    if (normalizedTurns === 1) {
+        // 90° rotation
+        moveHistory.push({ 
+            axis: touchState.swipeAxis, 
+            layer: touchState.swipeLayer, 
+            direction: 1 
+        });
+    } else if (normalizedTurns === 3) {
+        // 270° rotation = -90° rotation
+        moveHistory.push({ 
+            axis: touchState.swipeAxis, 
+            layer: touchState.swipeLayer, 
+            direction: -1 
+        });
+    } else if (normalizedTurns === 2) {
+        // 180° rotation = two 90° rotations
+        moveHistory.push({ 
+            axis: touchState.swipeAxis, 
+            layer: touchState.swipeLayer, 
+            direction: 1 
+        });
+        moveHistory.push({ 
+            axis: touchState.swipeAxis, 
+            layer: touchState.swipeLayer, 
+            direction: 1 
+        });
+    }
+    // normalizedTurns === 0 means no rotation, so no move recorded
+    
+    // Reset state
+    touchState.swipeAxis = null;
+    touchState.swipeLayer = null;
+    touchState.currentRotation = 0;
+}
+
+// Calculate swipe direction relative to face
+function calculateSwipeDirection(touch, faceInfo) {
+    if (!touchState.swipeInitialPos) return 0;
+    
+    // Use initial position for total distance calculation
+    const totalDeltaX = touch.clientX - touchState.swipeInitialPos.x;
+    const totalDeltaY = touch.clientY - touchState.swipeInitialPos.y;
+    
+    // Also calculate incremental delta for smooth updates
+    const deltaX = touch.clientX - touchState.swipeStartPos.x;
+    const deltaY = touch.clientY - touchState.swipeStartPos.y;
+    
+    const screenLength = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    if (screenLength < 2) return 0; // Minimum movement threshold
+    
+    const { axis, layer, normal } = faceInfo;
+    
+    // Get the face normal in world space
+    const faceNormal = normal.clone();
+    faceNormal.transformDirection(cubeGroup.matrixWorld);
+    
+    // Get the center of the face in world space
+    const faceCenter = new THREE.Vector3();
+    if (axis === 'x') faceCenter.set(layer * totalSize, 0, 0);
+    else if (axis === 'y') faceCenter.set(0, layer * totalSize, 0);
+    else faceCenter.set(0, 0, layer * totalSize);
+    faceCenter.applyMatrix4(cubeGroup.matrixWorld);
+    
+    // Convert screen coordinates to 3D ray
+    mouse.x = (touch.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(touch.clientY / window.innerHeight) * 2 + 1;
+    
+    const startMouse = new THREE.Vector2();
+    startMouse.x = (touchState.swipeStartPos.x / window.innerWidth) * 2 - 1;
+    startMouse.y = -(touchState.swipeStartPos.y / window.innerHeight) * 2 + 1;
+    
+    raycaster.setFromCamera(mouse, camera);
+    const currentRay = raycaster.ray.clone();
+    
+    raycaster.setFromCamera(startMouse, camera);
+    const startRay = raycaster.ray.clone();
+    
+    // Find intersection points on the face plane
+    const plane = new THREE.Plane(faceNormal, -faceNormal.dot(faceCenter));
+    
+    const currentIntersect = new THREE.Vector3();
+    const startIntersect = new THREE.Vector3();
+    
+    currentRay.intersectPlane(plane, currentIntersect);
+    startRay.intersectPlane(plane, startIntersect);
+    
+    if (!currentIntersect || !startIntersect) {
+        // Fallback to simple calculation
+        return calculateSimpleSwipeDirection(deltaX, deltaY, axis, layer);
+    }
+    
+    // Calculate swipe vector on the face plane
+    const swipeVector = new THREE.Vector3().subVectors(currentIntersect, startIntersect);
+    const swipeLength = swipeVector.length();
+    
+    if (swipeLength < 0.01) return 0;
+    
+    // Determine rotation axis vector
+    let rotationAxis = new THREE.Vector3();
+    if (axis === 'x') rotationAxis.set(1, 0, 0);
+    else if (axis === 'y') rotationAxis.set(0, 1, 0);
+    else rotationAxis.set(0, 0, 1);
+    rotationAxis.transformDirection(cubeGroup.matrixWorld);
+    
+    // Calculate rotation direction using cross product
+    // The rotation should follow the swipe direction
+    const cross = new THREE.Vector3().crossVectors(swipeVector, rotationAxis);
+    const dot = faceNormal.dot(cross);
+    
+    // Rotation speed - adjust for sensitivity (increased significantly)
+    // Use screen space delta for more direct control
+    const screenDelta = Math.sqrt(totalDeltaX * totalDeltaX + totalDeltaY * totalDeltaY);
+    const rotationSpeed = 0.002; // Per pixel rotation speed
+    const angle = screenDelta * rotationSpeed * (dot > 0 ? 1 : -1) * layer;
+    
+    return angle;
+}
+
+// Fallback simple swipe direction calculation
+function calculateSimpleSwipeDirection(deltaX, deltaY, axis, layer) {
+    const rotationSpeed = 0.015; // Increased from 0.003 for more responsive rotation
+    let angle = 0;
+    
+    // Determine rotation direction based on axis and swipe direction
+    if (axis === 'x') {
+        // Rotating around X axis - swipe up/down rotates
+        angle = -deltaY * rotationSpeed * layer;
+    } else if (axis === 'y') {
+        // Rotating around Y axis - swipe left/right rotates
+        angle = deltaX * rotationSpeed * layer;
+    } else if (axis === 'z') {
+        // Rotating around Z axis
+        angle = deltaX * rotationSpeed * layer;
+    }
+    
+    return angle;
+}
+
 container.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    
     if (e.touches.length === 1) {
-        isDragging = true;
-        previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        // Single touch - normal cube rotation
+        if (!touchState.isLocked) {
+            isDragging = true;
+            previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        }
+    } else if (e.touches.length === 2) {
+        // Two touches - lock cube and enable face swiping
+        touchState.isLocked = true;
+        isDragging = false;
+        
+        // First touch locks the cube
+        touchState.lockTouch = {
+            id: e.touches[0].identifier,
+            x: e.touches[0].clientX,
+            y: e.touches[0].clientY
+        };
+        
+        // Second touch is for swiping
+        touchState.swipeTouch = {
+            id: e.touches[1].identifier,
+            x: e.touches[1].clientX,
+            y: e.touches[1].clientY
+        };
+        
+        // Detect which face is being touched
+        const faceInfo = getFaceFromTouch(e.touches[1]);
+        if (faceInfo) {
+            touchState.swipeStartFace = faceInfo;
+            const initialPos = {
+                x: e.touches[1].clientX,
+                y: e.touches[1].clientY
+            };
+            touchState.swipeStartPos = initialPos;
+            touchState.swipeInitialPos = initialPos; // Store initial position
+            // Highlight the touched cubie - pass the face normal to highlight only that face
+            highlightCubie(faceInfo.cubie, faceInfo.normal);
+            startFaceRotation(faceInfo.axis, faceInfo.layer, 0);
+        }
     }
 });
 
 container.addEventListener('touchmove', (e) => {
-    if (!isDragging || e.touches.length !== 1) return;
+    e.preventDefault();
     
-    const deltaX = e.touches[0].clientX - previousMousePosition.x;
-    const deltaY = e.touches[0].clientY - previousMousePosition.y;
-    
-    cubeGroup.rotation.y += deltaX * 0.01;
-    cubeGroup.rotation.x += deltaY * 0.01;
-    
-    previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    if (e.touches.length === 1 && !touchState.isLocked) {
+        // Single touch rotation (normal mode)
+        if (isDragging) {
+            const deltaX = e.touches[0].clientX - previousMousePosition.x;
+            const deltaY = e.touches[0].clientY - previousMousePosition.y;
+            
+            cubeGroup.rotation.y += deltaX * 0.01;
+            cubeGroup.rotation.x += deltaY * 0.01;
+            
+            previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            updateFrontFaceIndicator();
+        }
+    } else if (e.touches.length === 2 && touchState.isLocked) {
+        // Two touches - update swipe
+        let swipeTouch = null;
+        for (let i = 0; i < e.touches.length; i++) {
+            if (e.touches[i].identifier === touchState.swipeTouch?.id) {
+                swipeTouch = e.touches[i];
+                break;
+            }
+        }
+        
+        if (swipeTouch && touchState.swipeStartFace) {
+            const faceInfo = touchState.swipeStartFace;
+            
+            // Calculate total rotation from initial position
+            const totalDeltaX = swipeTouch.clientX - touchState.swipeInitialPos.x;
+            const totalDeltaY = swipeTouch.clientY - touchState.swipeInitialPos.y;
+            const screenLength = Math.sqrt(totalDeltaX * totalDeltaX + totalDeltaY * totalDeltaY);
+            
+            if (screenLength > 2) {
+                // Use simpler, more direct calculation
+                const { axis, layer, worldNormal, cubiePos } = faceInfo;
+                const rotationSpeed = 0.004; // Per pixel - ~400px swipe = 90° turn (π/2 radians)
+                let angle = 0;
+                
+                // Determine rotation based on dominant swipe direction
+                // For front face (z=1, layer=1): Top and Left middle squares need direction correction
+                let extraFlip = 1;
+                
+                if (axis === 'z' && layer === 1) {
+                    // Front face - identify which edge piece we're touching
+                    const tolerance = 0.1;
+                    // Top edge: y=1, x=0 (middle of top row)
+                    const isTopEdge = Math.abs(cubiePos.y - totalSize) < tolerance && Math.abs(cubiePos.x) < tolerance;
+                    // Bottom edge: y=-1, x=0 (middle of bottom row)
+                    const isBottomEdge = Math.abs(cubiePos.y + totalSize) < tolerance && Math.abs(cubiePos.x) < tolerance;
+                    // Right edge: x=1, y=0 (middle of right column)
+                    const isRightEdge = Math.abs(cubiePos.x - totalSize) < tolerance && Math.abs(cubiePos.y) < tolerance;
+                    // Left edge: x=-1, y=0 (middle of left column)
+                    const isLeftEdge = Math.abs(cubiePos.x + totalSize) < tolerance && Math.abs(cubiePos.y) < tolerance;
+                    
+                    if (Math.abs(totalDeltaX) > Math.abs(totalDeltaY)) {
+                        // Horizontal swipe - Left edge needs flip, Right edge works correctly
+                        if (isLeftEdge) {
+                            extraFlip = -1;
+                        }
+                        // isRightEdge works correctly, no flip needed
+                    } else {
+                        // Vertical swipe - Top edge needs flip, Bottom edge works correctly
+                        if (isTopEdge) {
+                            extraFlip = -1;
+                        }
+                        // isBottomEdge works correctly, no flip needed
+                    }
+                }
+                
+                if (Math.abs(totalDeltaX) > Math.abs(totalDeltaY)) {
+                    // Horizontal swipe
+                    if (axis === 'y') {
+                        // Rotating around Y axis (U/D faces) - horizontal swipe rotates
+                        const flip = worldNormal.z > 0 ? 1 : -1;
+                        angle = totalDeltaX * rotationSpeed * layer * flip;
+                    } else if (axis === 'z') {
+                        // Rotating around Z axis (F/B faces) - horizontal swipe rotates
+                        const baseFlip = worldNormal.y > 0 ? 1 : -1;
+                        // Apply extraFlip only for Left edge (Right edge works correctly)
+                        let finalFlip = baseFlip;
+                        if (axis === 'z' && layer === 1) {
+                            const tolerance = 0.1;
+                            const isLeftEdge = Math.abs(cubiePos.x + totalSize) < tolerance && Math.abs(cubiePos.y) < tolerance;
+                            const isRightEdge = Math.abs(cubiePos.x - totalSize) < tolerance && Math.abs(cubiePos.y) < tolerance;
+                            if (isLeftEdge) {
+                                finalFlip = baseFlip * -1; // Flip for Left edge
+                            } else if (isRightEdge) {
+                                finalFlip = baseFlip; // No flip for Right edge (works correctly)
+                            }
+                        }
+                        angle = totalDeltaX * rotationSpeed * layer * finalFlip;
+                    } else {
+                        // Rotating around X axis (R/L faces) - horizontal swipe rotates
+                        const flip = worldNormal.z > 0 ? 1 : -1;
+                        angle = totalDeltaX * rotationSpeed * layer * flip;
+                    }
+                } else {
+                    // Vertical swipe
+                    if (axis === 'x') {
+                        // Rotating around X axis (R/L faces) - vertical swipe rotates
+                        const flip = worldNormal.y > 0 ? 1 : -1;
+                        angle = -totalDeltaY * rotationSpeed * layer * flip;
+                    } else if (axis === 'y') {
+                        // Rotating around Y axis (U/D faces) - vertical swipe rotates
+                        const flip = worldNormal.x > 0 ? 1 : -1;
+                        angle = -totalDeltaY * rotationSpeed * layer * flip;
+                    } else {
+                        // Rotating around Z axis (F/B faces) - vertical swipe rotates
+                        const baseFlip = worldNormal.x > 0 ? 1 : -1;
+                        // Apply extraFlip only for Top edge (Bottom edge works correctly)
+                        let finalFlip = baseFlip;
+                        if (axis === 'z' && layer === 1) {
+                            const tolerance = 0.1;
+                            const isTopEdge = Math.abs(cubiePos.y - totalSize) < tolerance && Math.abs(cubiePos.x) < tolerance;
+                            const isBottomEdge = Math.abs(cubiePos.y + totalSize) < tolerance && Math.abs(cubiePos.x) < tolerance;
+                            if (isTopEdge) {
+                                finalFlip = baseFlip * -1; // Flip for Top edge
+                            } else if (isBottomEdge) {
+                                finalFlip = baseFlip; // No flip for Bottom edge (works correctly)
+                            }
+                        }
+                        angle = -totalDeltaY * rotationSpeed * layer * finalFlip;
+                    }
+                }
+                
+                // Set rotation directly based on total swipe distance
+                touchState.currentRotation = angle;
+                
+                switch (axis) {
+                    case 'x':
+                        touchState.rotationGroup.rotation.x = angle;
+                        break;
+                    case 'y':
+                        touchState.rotationGroup.rotation.y = angle;
+                        break;
+                    case 'z':
+                        touchState.rotationGroup.rotation.z = angle;
+                        break;
+                }
+            }
+            
+            // Update swipe start position for next frame (for incremental calculations if needed)
+            touchState.swipeStartPos = {
+                x: swipeTouch.clientX,
+                y: swipeTouch.clientY
+            };
+        }
+    }
 });
 
-container.addEventListener('touchend', () => {
-    isDragging = false;
+container.addEventListener('touchend', (e) => {
+    if (e.touches.length === 0) {
+        // All touches ended
+        isDragging = false;
+        touchState.isLocked = false;
+        touchState.lockTouch = null;
+        
+        if (touchState.swipeTouch && touchState.rotationGroup) {
+            // Complete the face rotation
+            completeFaceRotation();
+        }
+        
+        touchState.swipeTouch = null;
+        touchState.swipeStartPos = null;
+        touchState.swipeInitialPos = null;
+        touchState.swipeStartFace = null;
+        removeHighlight();
+    } else if (e.touches.length === 1) {
+        // One touch remains - check if it's the lock or swipe
+        const remainingId = e.touches[0].identifier;
+        
+        if (touchState.lockTouch && remainingId === touchState.lockTouch.id) {
+            // Lock touch remains, swipe ended
+            if (touchState.rotationGroup) {
+                completeFaceRotation();
+            }
+            touchState.swipeTouch = null;
+            touchState.swipeStartPos = null;
+            touchState.swipeInitialPos = null;
+            touchState.swipeStartFace = null;
+            touchState.isLocked = false;
+            removeHighlight();
+        } else if (touchState.swipeTouch && remainingId === touchState.swipeTouch.id) {
+            // Swipe touch remains, lock ended - switch roles
+            touchState.lockTouch = touchState.swipeTouch;
+            touchState.swipeTouch = null;
+            touchState.swipeStartPos = null;
+            touchState.swipeInitialPos = null;
+            touchState.swipeStartFace = null;
+            if (touchState.rotationGroup) {
+                completeFaceRotation();
+            }
+            touchState.isLocked = false;
+            removeHighlight();
+        }
+    } else if (e.touches.length === 2) {
+        // Still two touches - update which is which
+        const touchIds = [e.touches[0].identifier, e.touches[1].identifier];
+        
+        if (touchState.lockTouch && !touchIds.includes(touchState.lockTouch.id)) {
+            // Lock touch ended, promote swipe to lock
+            touchState.lockTouch = touchState.swipeTouch;
+            touchState.swipeTouch = {
+                id: touchIds.find(id => id !== touchState.lockTouch.id),
+                x: e.touches[touchIds.indexOf(touchIds.find(id => id !== touchState.lockTouch.id))].clientX,
+                y: e.touches[touchIds.indexOf(touchIds.find(id => id !== touchState.lockTouch.id))].clientY
+            };
+            
+            // Detect new face
+            const newSwipeTouch = e.touches[touchIds.indexOf(touchState.swipeTouch.id)];
+            const faceInfo = getFaceFromTouch(newSwipeTouch);
+            if (faceInfo) {
+                if (touchState.rotationGroup) {
+                    completeFaceRotation();
+                }
+                const initialPos = {
+                    x: newSwipeTouch.clientX,
+                    y: newSwipeTouch.clientY
+                };
+                touchState.swipeStartFace = faceInfo;
+                touchState.swipeStartPos = initialPos;
+                touchState.swipeInitialPos = initialPos;
+                highlightCubie(faceInfo.cubie, faceInfo.normal);
+                startFaceRotation(faceInfo.axis, faceInfo.layer, 0);
+            } else {
+                removeHighlight();
+            }
+        } else if (touchState.swipeTouch && !touchIds.includes(touchState.swipeTouch.id)) {
+            // Swipe touch ended
+            if (touchState.rotationGroup) {
+                completeFaceRotation();
+            }
+            touchState.swipeTouch = {
+                id: touchIds.find(id => id !== touchState.lockTouch?.id),
+                x: e.touches[touchIds.indexOf(touchIds.find(id => id !== touchState.lockTouch?.id))].clientX,
+                y: e.touches[touchIds.indexOf(touchIds.find(id => id !== touchState.lockTouch?.id))].clientY
+            };
+            
+            // Detect new face
+            const newSwipeTouch = e.touches[touchIds.indexOf(touchState.swipeTouch.id)];
+            const faceInfo = getFaceFromTouch(newSwipeTouch);
+            if (faceInfo) {
+                const initialPos = {
+                    x: newSwipeTouch.clientX,
+                    y: newSwipeTouch.clientY
+                };
+                touchState.swipeStartFace = faceInfo;
+                touchState.swipeStartPos = initialPos;
+                touchState.swipeInitialPos = initialPos;
+                highlightCubie(faceInfo.cubie, faceInfo.normal);
+                startFaceRotation(faceInfo.axis, faceInfo.layer, 0);
+            } else {
+                touchState.swipeTouch = null;
+                touchState.swipeStartPos = null;
+                touchState.swipeInitialPos = null;
+                touchState.swipeStartFace = null;
+                removeHighlight();
+            }
+        }
+    }
 });
 
 // Zoom with scroll

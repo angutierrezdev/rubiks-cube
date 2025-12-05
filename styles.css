@@ -139,6 +139,14 @@ button:disabled {
     text-align: center;
     line-height: 1.2;
 }
+#ai-test-banner a {
+    color: #74b9ff;
+    text-decoration: underline;
+    transition: color 0.3s ease;
+}
+#ai-test-banner a:hover {
+    color: #0984e3;
+}
 @media (max-width: 600px) {
     #ai-test-banner {
         font-size: 12px;
