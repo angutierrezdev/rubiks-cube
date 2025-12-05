@@ -254,7 +254,6 @@
             const angle = direction * Math.PI / 2;
             const duration = 200; // ms
             const startTime = Date.now();
-            const startRotation = { x: 0, y: 0, z: 0 };
 
             function animate() {
                 const elapsed = Date.now() - startTime;
@@ -361,8 +360,9 @@
             // Generate 20 random moves
             for (let i = 0; i < 20; i++) {
                 const randomMove = moveNames[Math.floor(Math.random() * moveNames.length)];
-                const withPrime = Math.random() > 0.5 ? randomMove + "'" : randomMove;
-                scrambleMoves.push(withPrime.replace("''", ""));
+                // Randomly add prime or not (50% chance each)
+                const move = Math.random() > 0.5 ? randomMove + "'" : randomMove;
+                scrambleMoves.push(move);
             }
             
             updateStatus('Scrambling...');
