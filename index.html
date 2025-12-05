@@ -338,7 +338,8 @@
                         // Convert world quaternion to local quaternion relative to cubeGroup
                         const cubeGroupWorldQuaternion = new THREE.Quaternion();
                         cubeGroup.getWorldQuaternion(cubeGroupWorldQuaternion);
-                        cubie.quaternion.copy(worldQuaternion).premultiply(cubeGroupWorldQuaternion.invert());
+                        const invertedQuaternion = cubeGroupWorldQuaternion.clone().invert();
+                        cubie.quaternion.copy(worldQuaternion).premultiply(invertedQuaternion);
                     });
                     
                     cubeGroup.remove(rotationGroup);
