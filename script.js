@@ -429,40 +429,34 @@ const FACE_COLORS = {
     'green': { hex: '#00ff00', name: 'Green' }
 };
 
-// Determine which face is currently facing front based on cube rotation
-function getCurrentFrontFace() {
-    // Get the rotation of the cube group
+// Helper to get inverse quaternion from cube rotation
+function getCubeInverseQuaternion() {
     const rotation = cubeGroup.rotation;
-    
-    // Create a vector pointing in the -Z direction (towards camera from cube's perspective)
-    // We need to find which original face is now closest to facing the camera
-    const frontVector = new THREE.Vector3(0, 0, 1);
-    
-    // Create a quaternion from the cube's rotation
     const quaternion = new THREE.Quaternion();
     quaternion.setFromEuler(rotation);
-    
-    // Invert to get from world to local
-    const inverseQuaternion = quaternion.clone().invert();
-    
-    // Transform the front vector by the inverse rotation to find which local axis is pointing towards camera
-    frontVector.applyQuaternion(inverseQuaternion);
-    
-    // Find which axis has the largest component
-    const absX = Math.abs(frontVector.x);
-    const absY = Math.abs(frontVector.y);
-    const absZ = Math.abs(frontVector.z);
+    return quaternion.invert();
+}
+
+// Helper to determine which face a transformed vector points to
+function getFaceFromVector(vec) {
+    const absX = Math.abs(vec.x);
+    const absY = Math.abs(vec.y);
+    const absZ = Math.abs(vec.z);
     
     if (absZ >= absX && absZ >= absY) {
-        // Z axis is dominant
-        return frontVector.z > 0 ? 'blue' : 'green';
+        return { color: vec.z > 0 ? 'blue' : 'green', move: vec.z > 0 ? 'F' : 'B' };
     } else if (absX >= absY) {
-        // X axis is dominant
-        return frontVector.x > 0 ? 'red' : 'orange';
+        return { color: vec.x > 0 ? 'red' : 'orange', move: vec.x > 0 ? 'R' : 'L' };
     } else {
-        // Y axis is dominant
-        return frontVector.y > 0 ? 'white' : 'yellow';
+        return { color: vec.y > 0 ? 'white' : 'yellow', move: vec.y > 0 ? 'U' : 'D' };
     }
+}
+
+// Determine which face is currently facing front based on cube rotation
+function getCurrentFrontFace() {
+    const frontVector = new THREE.Vector3(0, 0, 1);
+    frontVector.applyQuaternion(getCubeInverseQuaternion());
+    return getFaceFromVector(frontVector).color;
 }
 
 // Update the front face indicator
@@ -486,6 +480,52 @@ container.addEventListener('touchmove', () => {
     }
 });
 
+// Get the current face orientation based on cube rotation
+// Returns an object mapping relative directions to actual cube faces
+function getCurrentFaceMapping() {
+    const inverseQuaternion = getCubeInverseQuaternion();
+    
+    // Define the 6 direction vectors
+    const directions = {
+        front: new THREE.Vector3(0, 0, 1),
+        back: new THREE.Vector3(0, 0, -1),
+        right: new THREE.Vector3(1, 0, 0),
+        left: new THREE.Vector3(-1, 0, 0),
+        up: new THREE.Vector3(0, 1, 0),
+        down: new THREE.Vector3(0, -1, 0)
+    };
+    
+    // Transform each direction to find which original face is in that position
+    const mapping = {};
+    
+    for (const [dir, vec] of Object.entries(directions)) {
+        const transformed = vec.clone().applyQuaternion(inverseQuaternion);
+        mapping[dir] = getFaceFromVector(transformed).move;
+    }
+    
+    return mapping;
+}
+
+// Static mapping of keyboard keys to relative directions
+const KEY_TO_RELATIVE = {
+    'F': 'front',
+    'B': 'back',
+    'R': 'right',
+    'L': 'left',
+    'U': 'up',
+    'D': 'down'
+};
+
+// Map keyboard input to actual move based on current orientation
+function getOrientedMove(key, isPrime) {
+    const mapping = getCurrentFaceMapping();
+    const relativeDir = KEY_TO_RELATIVE[key];
+    if (!relativeDir) return null;
+    
+    const actualFace = mapping[relativeDir];
+    return isPrime ? actualFace + "'" : actualFace;
+}
+
 // Keyboard controls
 document.addEventListener('keydown', (e) => {
     // Ignore if typing in an input field
@@ -496,8 +536,10 @@ document.addEventListener('keydown', (e) => {
     
     if (validMoves.includes(key)) {
         e.preventDefault();
-        const moveName = e.shiftKey ? key + "'" : key;
-        executeMove(moveName, true);
+        const moveName = getOrientedMove(key, e.shiftKey);
+        if (moveName) {
+            executeMove(moveName, true);
+        }
     }
 });
 
