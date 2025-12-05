@@ -50,6 +50,11 @@ const cubeSize = 1;
 const gap = 0.05;
 const totalSize = cubeSize + gap;
 
+// Touch rotation constants
+const TOUCH_ROTATION_SPEED = 0.004; // Per pixel - ~400px swipe = 90° turn (π/2 radians)
+const CENTER_CUBIE_THRESHOLD = 0.01; // Distance threshold to consider a cubie on the rotation axis
+const TANGENT_ALIGNMENT_THRESHOLD = 0.1; // Threshold for tangent vector magnitude
+
 // Move history for solving
 let moveHistory = [];
 let isAnimating = false;
@@ -851,8 +856,6 @@ function calculateSimpleSwipeDirection(deltaX, deltaY, axis, layer) {
 // Calculate rotation angle from touch swipe using proper 3D geometry
 // This correctly handles all faces and all positions on each face
 function calculateTouchRotationAngle(deltaX, deltaY, axis, layer, cubiePos) {
-    const rotationSpeed = 0.004; // Per pixel - ~400px swipe = 90° turn (π/2 radians)
-    
     // Get the rotation axis in world space
     let rotationAxisLocal = new THREE.Vector3();
     if (axis === 'x') rotationAxisLocal.set(1, 0, 0);
@@ -884,6 +887,7 @@ function calculateTouchRotationAngle(deltaX, deltaY, axis, layer, cubiePos) {
     const swipeDir = new THREE.Vector3().subVectors(worldPointMoved, worldPoint).normalize();
     
     // Get the vector from rotation axis center to cubie position in world space
+    // The axis center is the center of the face being rotated, on the rotation axis
     const axisCenter = new THREE.Vector3();
     if (axis === 'x') axisCenter.set(layer * totalSize, 0, 0);
     else if (axis === 'y') axisCenter.set(0, layer * totalSize, 0);
@@ -898,14 +902,14 @@ function calculateTouchRotationAngle(deltaX, deltaY, axis, layer, cubiePos) {
     const radiusLength = radiusVec.length();
     let tangent;
     
-    if (radiusLength < 0.01) {
+    if (radiusLength < CENTER_CUBIE_THRESHOLD) {
         // Center cubie - create a tangent based on camera right direction
         // The camera's right direction projected onto the face gives us a reasonable tangent
         const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
         // Make tangent perpendicular to the rotation axis
         tangent = new THREE.Vector3().crossVectors(rotationAxisWorld, cameraRight).normalize();
         // If the cross product is too small (rotation axis aligned with camera right), use camera up
-        if (tangent.length() < 0.1) {
+        if (tangent.length() < TANGENT_ALIGNMENT_THRESHOLD) {
             const cameraUp = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
             tangent = new THREE.Vector3().crossVectors(rotationAxisWorld, cameraUp).normalize();
         }
@@ -922,7 +926,7 @@ function calculateTouchRotationAngle(deltaX, deltaY, axis, layer, cubiePos) {
     
     // The sign of alignment tells us the rotation direction
     // We also need to account for the layer (1 or -1)
-    const angle = screenDist * rotationSpeed * Math.sign(alignment) * layer;
+    const angle = screenDist * TOUCH_ROTATION_SPEED * Math.sign(alignment) * layer;
     
     return angle;
 }
