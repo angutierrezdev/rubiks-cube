@@ -345,7 +345,7 @@ function executeMove(moveName, record = true, callback = null) {
 function scramble() {
     if (isAnimating || animationQueue.length > 0) return;
     
-    moveHistory = [];
+    // Don't clear moveHistory - accumulate scramble moves with any existing manual moves
     const moveNames = Object.keys(MOVES).filter(m => !m.includes("'"));
     const scrambleMoves = [];
     
