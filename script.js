@@ -349,12 +349,446 @@ resetBtn.addEventListener('click', reset);
 let isDragging = false;
 let previousMousePosition = { x: 0, y: 0 };
 
+// State for modifier key-based face rotation (Ctrl/Cmd to lock cube and swipe faces)
+let modifierKeyState = {
+    isLocked: false,            // Whether cube rotation is locked (modifier key held)
+    activeFaceRotation: null,   // Current active face rotation state
+    swipeStartPos: null,        // Starting position of swipe
+    swipeStartFace: null,       // Face being swiped
+    swipeAxis: null,            // Axis of rotation
+    swipeLayer: null,           // Layer being rotated
+    currentRotation: 0,         // Current rotation angle in radians
+    rotationGroup: null,        // Temporary group for rotation
+    highlightedCubie: null,     // Currently highlighted cubie
+    originalMaterials: null     // Original materials for restoration
+};
+
+// Get face information from a mouse position (reuses logic from getFaceFromTouch)
+function getFaceFromMouse(mouseEvent) {
+    mouse.x = (mouseEvent.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(mouseEvent.clientY / window.innerHeight) * 2 + 1;
+    
+    raycaster.setFromCamera(mouse, camera);
+    
+    // Check intersection with all cubies
+    const intersects = raycaster.intersectObjects(cubies, true);
+    
+    if (intersects.length > 0) {
+        const intersect = intersects[0];
+        const cubie = intersect.object;
+        
+        // Get local normal (before transformation) for face index determination
+        const localNormal = intersect.face.normal.clone();
+        
+        // Get the cubie's position in cubeGroup's local space
+        const cubiePos = cubie.position.clone();
+        
+        // Transform the face normal to cubeGroup's local space
+        const normalInCubeSpace = localNormal.clone();
+        normalInCubeSpace.applyQuaternion(cubie.quaternion);
+        
+        // Determine which face of the cube was hit based on normal in cube's local space
+        const absX = Math.abs(normalInCubeSpace.x);
+        const absY = Math.abs(normalInCubeSpace.y);
+        const absZ = Math.abs(normalInCubeSpace.z);
+        
+        let axis, layer;
+        if (absX >= absY && absX >= absZ) {
+            axis = 'x';
+            layer = normalInCubeSpace.x > 0 ? 1 : -1;
+        } else if (absY >= absZ) {
+            axis = 'y';
+            layer = normalInCubeSpace.y > 0 ? 1 : -1;
+        } else {
+            axis = 'z';
+            layer = normalInCubeSpace.z > 0 ? 1 : -1;
+        }
+        
+        // Check if this cubie is on the determined layer
+        const faceCubies = getCubiesOnFace(axis, layer);
+        if (faceCubies.includes(cubie)) {
+            // Transform normal to world space for rotation calculations
+            const worldNormal = intersect.face.normal.clone();
+            worldNormal.transformDirection(cubie.matrixWorld);
+            
+            return { axis, layer, cubie, normal: localNormal, worldNormal: worldNormal, cubiePos: cubiePos };
+        }
+    }
+    
+    return null;
+}
+
+// Start face rotation for modifier key mode
+function startModifierFaceRotation(axis, layer) {
+    if (modifierKeyState.rotationGroup) {
+        cubeGroup.remove(modifierKeyState.rotationGroup);
+    }
+    
+    const faceCubies = getCubiesOnFace(axis, layer);
+    modifierKeyState.rotationGroup = new THREE.Group();
+    cubeGroup.add(modifierKeyState.rotationGroup);
+    
+    faceCubies.forEach(cubie => {
+        const localPos = cubie.position.clone();
+        cubeGroup.remove(cubie);
+        modifierKeyState.rotationGroup.add(cubie);
+        cubie.position.copy(localPos);
+    });
+    
+    modifierKeyState.swipeAxis = axis;
+    modifierKeyState.swipeLayer = layer;
+    modifierKeyState.currentRotation = 0;
+}
+
+// Update face rotation during mouse drag (modifier key mode)
+function updateModifierFaceRotation(deltaAngle) {
+    if (!modifierKeyState.rotationGroup || modifierKeyState.swipeAxis === null) return;
+    
+    modifierKeyState.currentRotation += deltaAngle;
+    
+    switch (modifierKeyState.swipeAxis) {
+        case 'x':
+            modifierKeyState.rotationGroup.rotation.x = modifierKeyState.currentRotation;
+            break;
+        case 'y':
+            modifierKeyState.rotationGroup.rotation.y = modifierKeyState.currentRotation;
+            break;
+        case 'z':
+            modifierKeyState.rotationGroup.rotation.z = modifierKeyState.currentRotation;
+            break;
+    }
+}
+
+// Complete face rotation for modifier key mode - snap to nearest 90 degrees
+function completeModifierFaceRotation() {
+    if (!modifierKeyState.rotationGroup || modifierKeyState.swipeAxis === null) return;
+    
+    const currentAngle = modifierKeyState.currentRotation;
+    const snapAngle = Math.round(currentAngle / (Math.PI / 2)) * (Math.PI / 2);
+    const remainingAngle = snapAngle - currentAngle;
+    
+    if (Math.abs(remainingAngle) < 0.01) {
+        finalizeModifierFaceRotation(snapAngle);
+    } else {
+        const duration = 200;
+        const startTime = Date.now();
+        const startAngle = currentAngle;
+        
+        function animate() {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const eased = 1 - Math.pow(1 - progress, 3);
+            
+            const angle = startAngle + remainingAngle * eased;
+            modifierKeyState.currentRotation = angle;
+            
+            switch (modifierKeyState.swipeAxis) {
+                case 'x':
+                    modifierKeyState.rotationGroup.rotation.x = angle;
+                    break;
+                case 'y':
+                    modifierKeyState.rotationGroup.rotation.y = angle;
+                    break;
+                case 'z':
+                    modifierKeyState.rotationGroup.rotation.z = angle;
+                    break;
+            }
+            
+            if (progress < 1) {
+                requestAnimationFrame(animate);
+            } else {
+                finalizeModifierFaceRotation(snapAngle);
+            }
+        }
+        
+        animate();
+    }
+}
+
+// Finalize the rotation for modifier key mode
+function finalizeModifierFaceRotation(finalAngle) {
+    if (!modifierKeyState.rotationGroup || modifierKeyState.swipeAxis === null) return;
+    
+    switch (modifierKeyState.swipeAxis) {
+        case 'x':
+            modifierKeyState.rotationGroup.rotation.x = finalAngle;
+            break;
+        case 'y':
+            modifierKeyState.rotationGroup.rotation.y = finalAngle;
+            break;
+        case 'z':
+            modifierKeyState.rotationGroup.rotation.z = finalAngle;
+            break;
+    }
+    
+    const faceCubies = [];
+    modifierKeyState.rotationGroup.children.forEach(cubie => {
+        faceCubies.push(cubie);
+    });
+    
+    const quarterTurns = Math.round(finalAngle / (Math.PI / 2));
+    
+    faceCubies.forEach(cubie => {
+        const pos = new THREE.Vector3();
+        cubie.getWorldPosition(pos);
+        cubeGroup.worldToLocal(pos);
+        
+        pos.x = Math.round(pos.x / totalSize) * totalSize;
+        pos.y = Math.round(pos.y / totalSize) * totalSize;
+        pos.z = Math.round(pos.z / totalSize) * totalSize;
+        
+        const worldQuaternion = new THREE.Quaternion();
+        cubie.getWorldQuaternion(worldQuaternion);
+        
+        modifierKeyState.rotationGroup.remove(cubie);
+        cubeGroup.add(cubie);
+        
+        cubie.position.copy(pos);
+        
+        const cubeGroupWorldQuaternion = new THREE.Quaternion();
+        cubeGroup.getWorldQuaternion(cubeGroupWorldQuaternion);
+        const invertedQuaternion = cubeGroupWorldQuaternion.clone().invert();
+        cubie.quaternion.copy(worldQuaternion).premultiply(invertedQuaternion);
+    });
+    
+    cubeGroup.remove(modifierKeyState.rotationGroup);
+    modifierKeyState.rotationGroup = null;
+    
+    // Record the move
+    const normalizedTurns = ((quarterTurns % 4) + 4) % 4;
+    if (normalizedTurns === 1) {
+        moveHistory.push({ 
+            axis: modifierKeyState.swipeAxis, 
+            layer: modifierKeyState.swipeLayer, 
+            direction: 1 
+        });
+    } else if (normalizedTurns === 3) {
+        moveHistory.push({ 
+            axis: modifierKeyState.swipeAxis, 
+            layer: modifierKeyState.swipeLayer, 
+            direction: -1 
+        });
+    } else if (normalizedTurns === 2) {
+        moveHistory.push({ 
+            axis: modifierKeyState.swipeAxis, 
+            layer: modifierKeyState.swipeLayer, 
+            direction: 1 
+        });
+        moveHistory.push({ 
+            axis: modifierKeyState.swipeAxis, 
+            layer: modifierKeyState.swipeLayer, 
+            direction: 1 
+        });
+    }
+    
+    modifierKeyState.swipeAxis = null;
+    modifierKeyState.swipeLayer = null;
+    modifierKeyState.currentRotation = 0;
+}
+
+// Highlight a cubie for modifier key mode
+function highlightCubieForModifier(cubie, faceNormal) {
+    removeModifierHighlight();
+    
+    if (!cubie) return;
+    
+    modifierKeyState.highlightedCubie = cubie;
+    modifierKeyState.originalMaterials = [];
+    
+    const materials = Array.isArray(cubie.material) ? cubie.material : [cubie.material];
+    
+    let touchedFaceIndex = -1;
+    if (faceNormal) {
+        const absX = Math.abs(faceNormal.x);
+        const absY = Math.abs(faceNormal.y);
+        const absZ = Math.abs(faceNormal.z);
+        
+        if (absX >= absY && absX >= absZ) {
+            touchedFaceIndex = faceNormal.x > 0 ? 0 : 1;
+        } else if (absY >= absZ) {
+            touchedFaceIndex = faceNormal.y > 0 ? 2 : 3;
+        } else {
+            touchedFaceIndex = faceNormal.z > 0 ? 4 : 5;
+        }
+    }
+    
+    materials.forEach((material, index) => {
+        modifierKeyState.originalMaterials.push({
+            color: material.color.clone(),
+            emissive: material.emissive ? material.emissive.clone() : new THREE.Color(0x000000),
+            emissiveIntensity: material.emissiveIntensity !== undefined ? material.emissiveIntensity : 0
+        });
+        
+        if (index === touchedFaceIndex) {
+            const lightenedColor = new THREE.Color().lerpColors(
+                material.color,
+                new THREE.Color(0xffffff),
+                0.15
+            );
+            material.color.copy(lightenedColor);
+            
+            if (!material.emissive) {
+                material.emissive = new THREE.Color(0x000000);
+            }
+            material.emissive.setHex(0xffffff);
+            material.emissiveIntensity = 0.4;
+        } else {
+            const dimmedColor = new THREE.Color().lerpColors(
+                material.color,
+                new THREE.Color(0x000000),
+                0.3
+            );
+            material.color.copy(dimmedColor);
+        }
+        
+        material.needsUpdate = true;
+    });
+    
+    cubie.material.needsUpdate = true;
+}
+
+// Remove highlighting for modifier key mode
+function removeModifierHighlight() {
+    if (modifierKeyState.highlightedCubie && modifierKeyState.originalMaterials) {
+        const cubie = modifierKeyState.highlightedCubie;
+        const materials = Array.isArray(cubie.material) ? cubie.material : [cubie.material];
+        
+        materials.forEach((material, index) => {
+            if (modifierKeyState.originalMaterials[index]) {
+                const original = modifierKeyState.originalMaterials[index];
+                material.color.copy(original.color);
+                
+                if (material.emissive) {
+                    material.emissive.copy(original.emissive);
+                    material.emissiveIntensity = original.emissiveIntensity;
+                }
+                
+                material.needsUpdate = true;
+            }
+        });
+        
+        cubie.material.needsUpdate = true;
+        modifierKeyState.highlightedCubie = null;
+        modifierKeyState.originalMaterials = null;
+    }
+}
+
+// Calculate rotation angle for modifier key mode using proper 3D geometry
+function calculateModifierRotationAngle(deltaX, deltaY, axis, layer, cubiePos) {
+    let rotationAxisLocal = new THREE.Vector3();
+    if (axis === 'x') rotationAxisLocal.set(1, 0, 0);
+    else if (axis === 'y') rotationAxisLocal.set(0, 1, 0);
+    else rotationAxisLocal.set(0, 0, 1);
+    
+    const rotationAxisWorld = rotationAxisLocal.clone().transformDirection(cubeGroup.matrixWorld);
+    
+    const cubieWorldPos = cubiePos.clone();
+    cubeGroup.localToWorld(cubieWorldPos);
+    
+    const screenPoint = cubieWorldPos.clone().project(camera);
+    
+    const screenPointMoved = new THREE.Vector3(
+        screenPoint.x + (deltaX / window.innerWidth) * 2,
+        screenPoint.y - (deltaY / window.innerHeight) * 2,
+        screenPoint.z
+    );
+    
+    const worldPoint = screenPoint.clone().unproject(camera);
+    const worldPointMoved = screenPointMoved.clone().unproject(camera);
+    
+    const swipeVec = new THREE.Vector3().subVectors(worldPointMoved, worldPoint);
+    
+    const axisCenter = new THREE.Vector3();
+    if (axis === 'x') axisCenter.set(layer * totalSize, 0, 0);
+    else if (axis === 'y') axisCenter.set(0, layer * totalSize, 0);
+    else axisCenter.set(0, 0, layer * totalSize);
+    cubeGroup.localToWorld(axisCenter);
+    
+    const radiusVec = new THREE.Vector3().subVectors(cubieWorldPos, axisCenter);
+    
+    const radiusLength = radiusVec.length();
+    let tangent;
+    
+    if (radiusLength < CENTER_CUBIE_THRESHOLD) {
+        const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+        tangent = new THREE.Vector3().crossVectors(rotationAxisWorld, cameraRight).normalize();
+        if (tangent.length() < TANGENT_ALIGNMENT_THRESHOLD) {
+            const cameraUp = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+            tangent = new THREE.Vector3().crossVectors(rotationAxisWorld, cameraUp).normalize();
+        }
+    } else {
+        tangent = new THREE.Vector3().crossVectors(rotationAxisWorld, radiusVec).normalize();
+    }
+    
+    const tangentComponent = swipeVec.dot(tangent);
+    const angle = tangentComponent * TOUCH_ROTATION_SCALE;
+    
+    return angle;
+}
+
 container.addEventListener('mousedown', (e) => {
-    isDragging = true;
-    previousMousePosition = { x: e.clientX, y: e.clientY };
+    // Check if modifier key (Ctrl or Cmd/Meta) is held
+    if (e.ctrlKey || e.metaKey) {
+        // Modifier key held - enable face rotation mode
+        modifierKeyState.isLocked = true;
+        isDragging = false;
+        
+        // Detect which face is being clicked
+        const faceInfo = getFaceFromMouse(e);
+        if (faceInfo) {
+            modifierKeyState.swipeStartFace = faceInfo;
+            modifierKeyState.swipeStartPos = { x: e.clientX, y: e.clientY };
+            highlightCubieForModifier(faceInfo.cubie, faceInfo.normal);
+            startModifierFaceRotation(faceInfo.axis, faceInfo.layer);
+        }
+    } else {
+        // Normal cube rotation mode
+        isDragging = true;
+        previousMousePosition = { x: e.clientX, y: e.clientY };
+    }
 });
 
 container.addEventListener('mousemove', (e) => {
+    // Check if we're in modifier key face rotation mode
+    if (modifierKeyState.isLocked && modifierKeyState.swipeStartFace) {
+        const faceInfo = modifierKeyState.swipeStartFace;
+        
+        const deltaX = e.clientX - modifierKeyState.swipeStartPos.x;
+        const deltaY = e.clientY - modifierKeyState.swipeStartPos.y;
+        const screenLength = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        
+        if (screenLength > MIN_SWIPE_THRESHOLD) {
+            const { axis, layer, cubiePos } = faceInfo;
+            
+            const deltaAngle = calculateModifierRotationAngle(
+                deltaX, 
+                deltaY, 
+                axis, 
+                layer, 
+                cubiePos
+            );
+            
+            modifierKeyState.currentRotation += deltaAngle;
+            
+            switch (axis) {
+                case 'x':
+                    modifierKeyState.rotationGroup.rotation.x = modifierKeyState.currentRotation;
+                    break;
+                case 'y':
+                    modifierKeyState.rotationGroup.rotation.y = modifierKeyState.currentRotation;
+                    break;
+                case 'z':
+                    modifierKeyState.rotationGroup.rotation.z = modifierKeyState.currentRotation;
+                    break;
+            }
+        }
+        
+        // Update position for next frame's incremental calculation
+        modifierKeyState.swipeStartPos = { x: e.clientX, y: e.clientY };
+        return;
+    }
+    
+    // Normal cube rotation
     if (!isDragging) return;
     
     const deltaX = e.clientX - previousMousePosition.x;
@@ -367,10 +801,29 @@ container.addEventListener('mousemove', (e) => {
 });
 
 container.addEventListener('mouseup', () => {
+    if (modifierKeyState.isLocked) {
+        // Complete face rotation if we were in modifier key mode
+        if (modifierKeyState.rotationGroup) {
+            completeModifierFaceRotation();
+        }
+        modifierKeyState.isLocked = false;
+        modifierKeyState.swipeStartPos = null;
+        modifierKeyState.swipeStartFace = null;
+        removeModifierHighlight();
+    }
     isDragging = false;
 });
 
 container.addEventListener('mouseleave', () => {
+    if (modifierKeyState.isLocked) {
+        if (modifierKeyState.rotationGroup) {
+            completeModifierFaceRotation();
+        }
+        modifierKeyState.isLocked = false;
+        modifierKeyState.swipeStartPos = null;
+        modifierKeyState.swipeStartFace = null;
+        removeModifierHighlight();
+    }
     isDragging = false;
 });
 
