@@ -51,9 +51,10 @@ const gap = 0.05;
 const totalSize = cubeSize + gap;
 
 // Touch rotation constants
-const TOUCH_ROTATION_SPEED = 0.004; // Per pixel - ~400px swipe = 90° turn (π/2 radians)
 const CENTER_CUBIE_THRESHOLD = 0.01; // Distance threshold to consider a cubie on the rotation axis
 const TANGENT_ALIGNMENT_THRESHOLD = 0.1; // Threshold for tangent vector magnitude
+const TOUCH_ROTATION_SCALE = 2.0; // Converts world units to radians for touch rotation sensitivity
+const MIN_SWIPE_THRESHOLD = 1; // Minimum pixels of movement to register as a swipe
 
 // Move history for solving
 let moveHistory = [];
@@ -853,8 +854,9 @@ function calculateSimpleSwipeDirection(deltaX, deltaY, axis, layer) {
     return angle;
 }
 
-// Calculate rotation angle from touch swipe using proper 3D geometry
+// Calculate incremental rotation angle from touch swipe using proper 3D geometry
 // This correctly handles all faces and all positions on each face
+// Uses incremental deltas to avoid 180-degree jumps when swiping in circular motions
 function calculateTouchRotationAngle(deltaX, deltaY, axis, layer, cubiePos) {
     // Get the rotation axis in world space
     let rotationAxisLocal = new THREE.Vector3();
@@ -883,8 +885,8 @@ function calculateTouchRotationAngle(deltaX, deltaY, axis, layer, cubiePos) {
     const worldPoint = screenPoint.clone().unproject(camera);
     const worldPointMoved = screenPointMoved.clone().unproject(camera);
     
-    // Calculate the swipe direction in world space
-    const swipeDir = new THREE.Vector3().subVectors(worldPointMoved, worldPoint).normalize();
+    // Calculate the swipe vector in world space (not normalized, to preserve magnitude)
+    const swipeVec = new THREE.Vector3().subVectors(worldPointMoved, worldPoint);
     
     // Get the vector from rotation axis center to cubie position in world space
     // The axis center is the center of the face being rotated, on the rotation axis
@@ -918,16 +920,14 @@ function calculateTouchRotationAngle(deltaX, deltaY, axis, layer, cubiePos) {
         tangent = new THREE.Vector3().crossVectors(rotationAxisWorld, radiusVec).normalize();
     }
     
-    // The rotation magnitude should be based on how much the swipe aligns with the tangent
-    const alignment = swipeDir.dot(tangent);
+    // Project the swipe vector onto the tangent direction
+    // This gives us the component of swipe that contributes to rotation
+    // Using dot product preserves the sign based on direction alignment
+    const tangentComponent = swipeVec.dot(tangent);
     
-    // Calculate angle based on screen distance and alignment
-    const screenDist = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-    
-    // The sign of alignment tells us the rotation direction
-    // The geometry (cross product) already accounts for the layer position,
-    // so we don't need to multiply by layer here
-    const angle = screenDist * TOUCH_ROTATION_SPEED * Math.sign(alignment);
+    // Convert the tangent component to an angle increment
+    // The tangent component is in world units, we scale it appropriately
+    const angle = tangentComponent * TOUCH_ROTATION_SCALE;
     
     return angle;
 }
@@ -1005,41 +1005,42 @@ container.addEventListener('touchmove', (e) => {
         if (swipeTouch && touchState.swipeStartFace) {
             const faceInfo = touchState.swipeStartFace;
             
-            // Calculate total rotation from initial position
-            const totalDeltaX = swipeTouch.clientX - touchState.swipeInitialPos.x;
-            const totalDeltaY = swipeTouch.clientY - touchState.swipeInitialPos.y;
-            const screenLength = Math.sqrt(totalDeltaX * totalDeltaX + totalDeltaY * totalDeltaY);
+            // Calculate incremental delta from last position (not total from initial)
+            // This prevents 180-degree jumps when swiping in circular motions
+            const deltaX = swipeTouch.clientX - touchState.swipeStartPos.x;
+            const deltaY = swipeTouch.clientY - touchState.swipeStartPos.y;
+            const screenLength = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
             
-            if (screenLength > 2) {
+            if (screenLength > MIN_SWIPE_THRESHOLD) {
                 const { axis, layer, cubiePos } = faceInfo;
                 
-                // Calculate angle using proper 3D geometry
+                // Calculate incremental angle using proper 3D geometry
                 // This works for all faces and all positions on each face
-                const angle = calculateTouchRotationAngle(
-                    totalDeltaX, 
-                    totalDeltaY, 
+                const deltaAngle = calculateTouchRotationAngle(
+                    deltaX, 
+                    deltaY, 
                     axis, 
                     layer, 
                     cubiePos
                 );
                 
-                // Set rotation directly based on total swipe distance
-                touchState.currentRotation = angle;
+                // Accumulate rotation incrementally
+                touchState.currentRotation += deltaAngle;
                 
                 switch (axis) {
                     case 'x':
-                        touchState.rotationGroup.rotation.x = angle;
+                        touchState.rotationGroup.rotation.x = touchState.currentRotation;
                         break;
                     case 'y':
-                        touchState.rotationGroup.rotation.y = angle;
+                        touchState.rotationGroup.rotation.y = touchState.currentRotation;
                         break;
                     case 'z':
-                        touchState.rotationGroup.rotation.z = angle;
+                        touchState.rotationGroup.rotation.z = touchState.currentRotation;
                         break;
                 }
             }
             
-            // Update swipe start position for next frame (for incremental calculations if needed)
+            // Update swipe start position for next frame's incremental calculation
             touchState.swipeStartPos = {
                 x: swipeTouch.clientX,
                 y: swipeTouch.clientY
