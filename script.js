@@ -511,9 +511,6 @@ function getFaceFromTouch(touch) {
         // Get local normal (before transformation) for face index determination
         const localNormal = intersect.face.normal.clone();
         
-        // Get the cubie's position in cubeGroup's local space
-        const cubiePos = cubie.position.clone();
-        
         // Transform the face normal to cubeGroup's local space (not world space)
         // This ensures axis/layer determination works correctly regardless of cube rotation
         const normalInCubeSpace = localNormal.clone();
@@ -546,7 +543,7 @@ function getFaceFromTouch(touch) {
             const worldNormal = intersect.face.normal.clone();
             worldNormal.transformDirection(cubie.matrixWorld);
             
-            return { axis, layer, cubie, normal: localNormal, worldNormal: worldNormal, cubiePos: cubiePos };
+            return { axis, layer, cubie, normal: localNormal, worldNormal: worldNormal };
         }
     }
     
