@@ -7,7 +7,7 @@ A fully functional 3D Rubik's Cube simulation built with Three.js. Features smoo
 - 🎮 **Interactive 3D Cube** - Rotate the view by dragging with your mouse or touch
 - 🔄 **Zoom Control** - Scroll to zoom in and out
 - 🎲 **Scramble** - Randomly scramble the cube with 20 moves
-- ✨ **Auto-Solve** - Watch the cube solve itself automatically by reversing scramble moves
+- ✨ **Auto-Solve** - Return the cube to its solved state instantly
 - 🔁 **Reset** - Return the cube to its solved state instantly
 - ⌨️ **Keyboard Controls** - Use R, U, D, L, F, B keys for moves (Shift for prime moves)
 - 🧭 **Orientation-Aware Moves** - Keyboard moves are relative to current view orientation
@@ -32,7 +32,7 @@ rubiks-cube/
 1. Open `index.html` in a modern web browser
 2. Use the buttons or keyboard to interact:
    - **Scramble** - Mix up the cube randomly with 20 moves
-   - **Solve** - Auto-solve the cube by reversing the scramble moves
+   - **Solve** - Return the cube to its solved state instantly
    - **Reset** - Reset to the solved state instantly
 
 ## Controls
@@ -49,7 +49,7 @@ rubiks-cube/
 
 ### Button Controls
 - **Scramble** - Randomly scrambles the cube with 20 moves
-- **Solve** - Automatically solves the cube by reversing scramble moves
+- **Solve** - Returns the cube to its solved state instantly
 - **Reset** - Instantly resets to solved state
 
 ## Technical Details

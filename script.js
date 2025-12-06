@@ -377,37 +377,18 @@ function scramble() {
     doNextMove();
 }
 
-// Solve the cube (reverse the moves)
+// Solve the cube (reset to solved state)
 function solve() {
     if (isAnimating || animationQueue.length > 0) return;
-    if (moveHistory.length === 0) {
-        updateStatus('Cube is already solved!');
-        return;
-    }
     
     updateStatus('Solving...');
     disableButtons();
     
-    // Reverse the move history
-    const solveMoves = [...moveHistory].reverse();
-    moveHistory = [];
+    // Reset cube to solved state
+    initCube();
     
-    let index = 0;
-    function doNextMove() {
-        if (index < solveMoves.length) {
-            const move = solveMoves[index];
-            // Reverse the direction
-            rotateFace(move.axis, move.layer, -move.direction, false, () => {
-                index++;
-                doNextMove();
-            });
-        } else {
-            updateStatus('Solved! ✨');
-            enableButtons();
-        }
-    }
-    
-    doNextMove();
+    updateStatus('Solved! ✨');
+    enableButtons();
 }
 
 // Reset the cube
