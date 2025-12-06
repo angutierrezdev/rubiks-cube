@@ -121,14 +121,18 @@ function getCubieTypeAndNeighbors(clickedAxis, clickedLayer, cubiePos) {
  * @param {Array} neighborFaces - Array of neighbor faces [{axis, layer}, ...]
  * @param {number} deltaX - Horizontal swipe delta in screen pixels
  * @param {number} deltaY - Vertical swipe delta in screen pixels
- * @param {string} clickedAxis - The axis of the clicked face
- * @returns {{axis: string, layer: number}} - The selected neighbor face to rotate
+ * @returns {{axis: string, layer: number}|null} - The selected neighbor face to rotate, or null if no neighbors
  * 
  * Logic: 
  * - Horizontal swipe (|deltaX| > |deltaY|) → rotate the Y-axis neighbor (top/bottom)
  * - Vertical swipe (|deltaY| >= |deltaX|) → rotate the non-Y neighbor (left/right/front/back)
  */
-function selectCornerNeighborBySwipeDirection(neighborFaces, deltaX, deltaY, clickedAxis) {
+function selectCornerNeighborBySwipeDirection(neighborFaces, deltaX, deltaY) {
+    // Handle empty array case
+    if (!neighborFaces || neighborFaces.length === 0) {
+        return null;
+    }
+    
     const isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
     
     // For horizontal swipe: prefer Y-axis neighbor (top/bottom faces)
@@ -451,7 +455,9 @@ let modifierKeyState = {
     rotationGroup: null,        // Temporary group for rotation
     highlightedCubie: null,     // Currently highlighted cubie
     originalMaterials: null,    // Original materials for restoration
-    cornerRotationStarted: false // Whether corner rotation has started (after direction detected)
+    cornerRotationStarted: false, // Whether corner rotation has started (after direction detected)
+    selectedAxis: null,         // Selected axis for corner rotation
+    selectedLayer: null         // Selected layer for corner rotation
 };
 
 // Get face information from a mouse position (reuses logic from getFaceFromTouch)
@@ -882,34 +888,38 @@ container.addEventListener('mousemove', (e) => {
                 const selectedFace = selectCornerNeighborBySwipeDirection(
                     faceInfo.neighborFaces,
                     totalDeltaX,
-                    totalDeltaY,
-                    faceInfo.axis
+                    totalDeltaY
                 );
                 
-                // Update faceInfo with selected neighbor face
-                faceInfo.axis = selectedFace.axis;
-                faceInfo.layer = selectedFace.layer;
-                
-                // Now start the rotation with the selected face
-                startModifierFaceRotation(selectedFace.axis, selectedFace.layer);
-                modifierKeyState.cornerRotationStarted = true;
+                // Only proceed if a valid neighbor was found
+                if (selectedFace) {
+                    // Store selected face in a separate property to avoid mutating original faceInfo
+                    modifierKeyState.selectedAxis = selectedFace.axis;
+                    modifierKeyState.selectedLayer = selectedFace.layer;
+                    
+                    // Now start the rotation with the selected face
+                    startModifierFaceRotation(selectedFace.axis, selectedFace.layer);
+                    modifierKeyState.cornerRotationStarted = true;
+                }
             }
             
             // Only rotate if rotation group has been created
             if (modifierKeyState.rotationGroup) {
-                const { axis, layer, cubiePos } = faceInfo;
+                // Use selected axis/layer for corners, original for others
+                const rotationAxis = modifierKeyState.selectedAxis || faceInfo.axis;
+                const rotationLayer = modifierKeyState.selectedLayer || faceInfo.layer;
                 
                 const deltaAngle = calculateModifierRotationAngle(
                     deltaX, 
                     deltaY, 
-                    axis, 
-                    layer, 
-                    cubiePos
+                    rotationAxis, 
+                    rotationLayer, 
+                    faceInfo.cubiePos
                 );
                 
                 modifierKeyState.currentRotation += deltaAngle;
                 
-                switch (axis) {
+                switch (rotationAxis) {
                     case 'x':
                         modifierKeyState.rotationGroup.rotation.x = modifierKeyState.currentRotation;
                         break;
@@ -950,6 +960,8 @@ container.addEventListener('mouseup', () => {
         modifierKeyState.swipeStartPos = null;
         modifierKeyState.swipeInitialPos = null;
         modifierKeyState.swipeStartFace = null;
+        modifierKeyState.selectedAxis = null;
+        modifierKeyState.selectedLayer = null;
         modifierKeyState.cornerRotationStarted = false;
         removeModifierHighlight();
     }
@@ -966,6 +978,8 @@ container.addEventListener('mouseleave', () => {
         modifierKeyState.swipeInitialPos = null;
         modifierKeyState.swipeStartFace = null;
         modifierKeyState.cornerRotationStarted = false;
+        modifierKeyState.selectedAxis = null;
+        modifierKeyState.selectedLayer = null;
         removeModifierHighlight();
     }
     isDragging = false;
@@ -987,7 +1001,9 @@ let touchState = {
     rotationGroup: null,  // Temporary group for rotation
     highlightedCubie: null, // Currently highlighted cubie
     originalMaterials: null, // Original materials for restoration
-    cornerRotationStarted: false // Whether corner rotation has started (after direction detected)
+    cornerRotationStarted: false, // Whether corner rotation has started (after direction detected)
+    selectedAxis: null,   // Selected axis for corner rotation
+    selectedLayer: null   // Selected layer for corner rotation
 };
 
 // Raycaster for detecting which face is touched
@@ -1587,6 +1603,8 @@ container.addEventListener('touchstart', (e) => {
             // For corner cubies, delay rotation start until swipe direction is known
             if (faceInfo.cubieType === 'corner') {
                 touchState.cornerRotationStarted = false;
+        touchState.selectedAxis = null;
+        touchState.selectedLayer = null;
                 // Don't start rotation yet - wait for first move
             } else {
                 // For center and edge cubies, start rotation immediately with clicked face
@@ -1642,37 +1660,41 @@ container.addEventListener('touchmove', (e) => {
                     const selectedFace = selectCornerNeighborBySwipeDirection(
                         faceInfo.neighborFaces,
                         totalDeltaX,
-                        totalDeltaY,
-                        faceInfo.axis
+                        totalDeltaY
                     );
                     
-                    // Update faceInfo with selected neighbor face
-                    faceInfo.axis = selectedFace.axis;
-                    faceInfo.layer = selectedFace.layer;
-                    
-                    // Now start the rotation with the selected face
-                    startFaceRotation(selectedFace.axis, selectedFace.layer, 0);
-                    touchState.cornerRotationStarted = true;
+                    // Only proceed if a valid neighbor was found
+                    if (selectedFace) {
+                        // Store selected face in a separate property to avoid mutating original faceInfo
+                        touchState.selectedAxis = selectedFace.axis;
+                        touchState.selectedLayer = selectedFace.layer;
+                        
+                        // Now start the rotation with the selected face
+                        startFaceRotation(selectedFace.axis, selectedFace.layer, 0);
+                        touchState.cornerRotationStarted = true;
+                    }
                 }
                 
                 // Only rotate if rotation group has been created
                 if (touchState.rotationGroup) {
-                    const { axis, layer, cubiePos } = faceInfo;
+                    // Use selected axis/layer for corners, original for others
+                    const rotationAxis = touchState.selectedAxis || faceInfo.axis;
+                    const rotationLayer = touchState.selectedLayer || faceInfo.layer;
                     
                     // Calculate incremental angle using proper 3D geometry
                     // This works for all faces and all positions on each face
                     const deltaAngle = calculateTouchRotationAngle(
                         deltaX, 
                         deltaY, 
-                        axis, 
-                        layer, 
-                        cubiePos
+                        rotationAxis, 
+                        rotationLayer, 
+                        faceInfo.cubiePos
                     );
                     
                     // Accumulate rotation incrementally
                     touchState.currentRotation += deltaAngle;
                     
-                    switch (axis) {
+                    switch (rotationAxis) {
                         case 'x':
                             touchState.rotationGroup.rotation.x = touchState.currentRotation;
                             break;
@@ -1712,6 +1734,8 @@ container.addEventListener('touchend', (e) => {
         touchState.swipeInitialPos = null;
         touchState.swipeStartFace = null;
         touchState.cornerRotationStarted = false;
+        touchState.selectedAxis = null;
+        touchState.selectedLayer = null;
         removeHighlight();
     } else if (e.touches.length === 1) {
         // One touch remains - check if it's the lock or swipe
@@ -1727,6 +1751,8 @@ container.addEventListener('touchend', (e) => {
             touchState.swipeInitialPos = null;
             touchState.swipeStartFace = null;
             touchState.cornerRotationStarted = false;
+        touchState.selectedAxis = null;
+        touchState.selectedLayer = null;
             touchState.isLocked = false;
             removeHighlight();
         } else if (touchState.swipeTouch && remainingId === touchState.swipeTouch.id) {
@@ -1737,6 +1763,8 @@ container.addEventListener('touchend', (e) => {
             touchState.swipeInitialPos = null;
             touchState.swipeStartFace = null;
             touchState.cornerRotationStarted = false;
+        touchState.selectedAxis = null;
+        touchState.selectedLayer = null;
             if (touchState.rotationGroup) {
                 completeFaceRotation();
             }
@@ -1775,12 +1803,16 @@ container.addEventListener('touchend', (e) => {
                 // For corner cubies, delay rotation start
                 if (faceInfo.cubieType === 'corner') {
                     touchState.cornerRotationStarted = false;
+        touchState.selectedAxis = null;
+        touchState.selectedLayer = null;
                 } else {
                     touchState.cornerRotationStarted = true;
                     startFaceRotation(faceInfo.axis, faceInfo.layer, 0);
                 }
             } else {
                 touchState.cornerRotationStarted = false;
+        touchState.selectedAxis = null;
+        touchState.selectedLayer = null;
                 removeHighlight();
             }
         } else if (touchState.swipeTouch && !touchIds.includes(touchState.swipeTouch.id)) {
@@ -1810,6 +1842,8 @@ container.addEventListener('touchend', (e) => {
                 // For corner cubies, delay rotation start
                 if (faceInfo.cubieType === 'corner') {
                     touchState.cornerRotationStarted = false;
+        touchState.selectedAxis = null;
+        touchState.selectedLayer = null;
                 } else {
                     touchState.cornerRotationStarted = true;
                     startFaceRotation(faceInfo.axis, faceInfo.layer, 0);
@@ -1820,6 +1854,8 @@ container.addEventListener('touchend', (e) => {
                 touchState.swipeInitialPos = null;
                 touchState.swipeStartFace = null;
                 touchState.cornerRotationStarted = false;
+        touchState.selectedAxis = null;
+        touchState.selectedLayer = null;
                 removeHighlight();
             }
         }
