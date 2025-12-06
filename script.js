@@ -55,42 +55,58 @@ const CENTER_CUBIE_THRESHOLD = 0.01; // Distance threshold to consider a cubie o
 const TANGENT_ALIGNMENT_THRESHOLD = 0.1; // Threshold for tangent vector magnitude
 const TOUCH_ROTATION_SCALE = 2.0; // Converts world units to radians for touch rotation sensitivity
 const MIN_SWIPE_THRESHOLD = 1; // Minimum pixels of movement to register as a swipe
+const CUBIE_POSITION_TOLERANCE = 0.1; // Tolerance for determining cubie face membership
 
 // Move history for solving
 let moveHistory = [];
 
-// Helper function to get a neighbor face for edge/corner cubies
-// Instead of rotating the clicked face, rotate an adjacent face the cubie belongs to
+/**
+ * Gets a neighbor face for edge/corner cubies instead of the clicked face.
+ * This creates an interesting twist where clicking on a face rotates an adjacent face.
+ * 
+ * @param {string} clickedAxis - The axis of the clicked face ('x', 'y', or 'z')
+ * @param {number} clickedLayer - The layer of the clicked face (1 or -1)
+ * @param {THREE.Vector3} cubiePos - The position of the cubie in cubeGroup's local space
+ * @returns {{axis: string, layer: number}} - The neighbor face to rotate, or the original face for center cubies
+ * 
+ * For corner cubies (3 outer faces): returns one of the 2 neighbor faces
+ * For edge cubies (2 outer faces): returns the 1 neighbor face
+ * For center cubies (1 outer face): returns the clicked face (no change)
+ * 
+ * The selection follows a fixed priority order (y > x > z) for consistent behavior.
+ */
 function getNeighborFace(clickedAxis, clickedLayer, cubiePos) {
-    const tolerance = 0.1;
-    
     // Determine all outer faces this cubie belongs to based on its position
     // A cubie belongs to a face if its coordinate in that axis direction is at the edge (±totalSize)
+    // Use fixed priority order (y > x > z) for deterministic and consistent behavior
     const faces = [];
     
-    if (Math.abs(cubiePos.x - totalSize) < tolerance) {
-        faces.push({ axis: 'x', layer: 1 });
-    }
-    if (Math.abs(cubiePos.x + totalSize) < tolerance) {
-        faces.push({ axis: 'x', layer: -1 });
-    }
-    if (Math.abs(cubiePos.y - totalSize) < tolerance) {
+    // Check Y faces first (highest priority)
+    if (Math.abs(cubiePos.y - totalSize) < CUBIE_POSITION_TOLERANCE) {
         faces.push({ axis: 'y', layer: 1 });
     }
-    if (Math.abs(cubiePos.y + totalSize) < tolerance) {
+    if (Math.abs(cubiePos.y + totalSize) < CUBIE_POSITION_TOLERANCE) {
         faces.push({ axis: 'y', layer: -1 });
     }
-    if (Math.abs(cubiePos.z - totalSize) < tolerance) {
+    // Check X faces second
+    if (Math.abs(cubiePos.x - totalSize) < CUBIE_POSITION_TOLERANCE) {
+        faces.push({ axis: 'x', layer: 1 });
+    }
+    if (Math.abs(cubiePos.x + totalSize) < CUBIE_POSITION_TOLERANCE) {
+        faces.push({ axis: 'x', layer: -1 });
+    }
+    // Check Z faces last (lowest priority)
+    if (Math.abs(cubiePos.z - totalSize) < CUBIE_POSITION_TOLERANCE) {
         faces.push({ axis: 'z', layer: 1 });
     }
-    if (Math.abs(cubiePos.z + totalSize) < tolerance) {
+    if (Math.abs(cubiePos.z + totalSize) < CUBIE_POSITION_TOLERANCE) {
         faces.push({ axis: 'z', layer: -1 });
     }
     
     // Filter out the clicked face to get neighbor faces
     const neighborFaces = faces.filter(f => !(f.axis === clickedAxis && f.layer === clickedLayer));
     
-    // If there are neighbor faces (edge or corner cubie), return the first one
+    // If there are neighbor faces (edge or corner cubie), return the first one (highest priority)
     // If no neighbor faces (center cubie), return the original clicked face
     if (neighborFaces.length > 0) {
         return neighborFaces[0];
