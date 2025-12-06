@@ -30,390 +30,97 @@ const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
 directionalLight2.position.set(-5, -5, -5);
 scene.add(directionalLight2);
 
-// Cube colors (standard Rubik's cube colors)
-const COLORS = {
-    white: 0xffffff,   // Up (Y+)
-    yellow: 0xffff00, // Down (Y-)
-    red: 0xff0000,    // Right (X+)
-    orange: 0xff8c00, // Left (X-)
-    blue: 0x0000ff,   // Front (Z+)
-    green: 0x00ff00,  // Back (Z-)
-    black: 0x111111   // Internal faces
-};
-
-// Cube group and cubies
+// Cube group
 const cubeGroup = new THREE.Group();
 scene.add(cubeGroup);
 
-let cubies = [];
-const cubeSize = 1;
-const gap = 0.05;
-const totalSize = cubeSize + gap;
+// Initialize the cube logic
+const rubiksCube = new RubiksCube(cubeGroup);
 
 // Touch rotation constants
-const CENTER_CUBIE_THRESHOLD = 0.01; // Distance threshold to consider a cubie on the rotation axis
-const TANGENT_ALIGNMENT_THRESHOLD = 0.1; // Threshold for tangent vector magnitude
-const TOUCH_ROTATION_SCALE = 2.0; // Converts world units to radians for touch rotation sensitivity
-const MIN_SWIPE_THRESHOLD = 1; // Minimum pixels of movement to register as a swipe
-const CUBIE_POSITION_TOLERANCE = 0.1; // Tolerance for determining cubie face membership
-
-// Move history for solving
-let moveHistory = [];
+const CENTER_CUBIE_THRESHOLD = 0.01;
+const TANGENT_ALIGNMENT_THRESHOLD = 0.1;
+const TOUCH_ROTATION_SCALE = 2.0;
+const MIN_SWIPE_THRESHOLD = 1;
 
 /**
  * Gets cubie type and neighbor faces for special corner rotation behavior.
- * 
- * @param {string} clickedAxis - The axis of the clicked face ('x', 'y', or 'z')
- * @param {number} clickedLayer - The layer of the clicked face (1 or -1)
- * @param {THREE.Vector3} cubiePos - The position of the cubie in cubeGroup's local space
- * @returns {{cubieType: string, neighborFaces: Array}} - Cubie type ('center', 'edge', 'corner') and array of neighbor faces
- * 
- * Behavior:
- * - Center cubies (1 outer face): rotate the clicked face (unchanged)
- * - Edge cubies (2 outer faces): rotate the clicked face (unchanged)
- * - Corner cubies (3 outer faces): rotate neighbor based on swipe direction (handled later)
  */
 function getCubieTypeAndNeighbors(clickedAxis, clickedLayer, cubiePos) {
-    // Determine all outer faces this cubie belongs to based on its position
-    const faces = [];
-    
-    // Check Y faces
-    if (Math.abs(cubiePos.y - totalSize) < CUBIE_POSITION_TOLERANCE) {
-        faces.push({ axis: 'y', layer: 1 });
-    }
-    if (Math.abs(cubiePos.y + totalSize) < CUBIE_POSITION_TOLERANCE) {
-        faces.push({ axis: 'y', layer: -1 });
-    }
-    // Check X faces
-    if (Math.abs(cubiePos.x - totalSize) < CUBIE_POSITION_TOLERANCE) {
-        faces.push({ axis: 'x', layer: 1 });
-    }
-    if (Math.abs(cubiePos.x + totalSize) < CUBIE_POSITION_TOLERANCE) {
-        faces.push({ axis: 'x', layer: -1 });
-    }
-    // Check Z faces
-    if (Math.abs(cubiePos.z - totalSize) < CUBIE_POSITION_TOLERANCE) {
-        faces.push({ axis: 'z', layer: 1 });
-    }
-    if (Math.abs(cubiePos.z + totalSize) < CUBIE_POSITION_TOLERANCE) {
-        faces.push({ axis: 'z', layer: -1 });
-    }
-    
-    // Filter out the clicked face to get neighbor faces
-    const neighborFaces = faces.filter(f => !(f.axis === clickedAxis && f.layer === clickedLayer));
-    
-    // Determine cubie type based on number of outer faces
-    let cubieType;
-    if (faces.length === 1) {
-        cubieType = 'center';
-    } else if (faces.length === 2) {
-        cubieType = 'edge';
-    } else {
-        cubieType = 'corner';
-    }
-    
-    return { cubieType, neighborFaces };
+    return rubiksCube.getCubieTypeAndNeighbors(clickedAxis, clickedLayer, cubiePos);
 }
 
 /**
  * Selects which neighbor face to rotate for a corner cubie based on swipe direction.
- * 
- * @param {Array} neighborFaces - Array of neighbor faces [{axis, layer}, ...]
- * @param {number} deltaX - Horizontal swipe delta in screen pixels
- * @param {number} deltaY - Vertical swipe delta in screen pixels
- * @returns {{axis: string, layer: number}|null} - The selected neighbor face to rotate, or null if no neighbors
- * 
- * Logic: 
- * - Horizontal swipe (|deltaX| > |deltaY|) → rotate the Y-axis neighbor (top/bottom)
- * - Vertical swipe (|deltaY| >= |deltaX|) → rotate the non-Y neighbor (left/right/front/back)
  */
 function selectCornerNeighborBySwipeDirection(neighborFaces, deltaX, deltaY) {
-    // Handle empty array case
-    if (!neighborFaces || neighborFaces.length === 0) {
-        return null;
-    }
-    
-    const isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
-    
-    // For horizontal swipe: prefer Y-axis neighbor (top/bottom faces)
-    // For vertical swipe: prefer non-Y neighbor (side faces)
-    if (isHorizontalSwipe) {
-        // Find Y-axis neighbor
-        const yNeighbor = neighborFaces.find(f => f.axis === 'y');
-        if (yNeighbor) return yNeighbor;
-    } else {
-        // Find non-Y neighbor (X or Z axis)
-        const sideNeighbor = neighborFaces.find(f => f.axis !== 'y');
-        if (sideNeighbor) return sideNeighbor;
-    }
-    
-    // Fallback to first neighbor if preferred not found
-    return neighborFaces[0];
+    return rubiksCube.selectCornerNeighborBySwipeDirection(neighborFaces, deltaX, deltaY);
 }
 
 let isAnimating = false;
 let animationQueue = [];
 
-// Create a single cubie at position (x, y, z)
-function createCubie(x, y, z) {
-    const geometry = new THREE.BoxGeometry(cubeSize * 0.95, cubeSize * 0.95, cubeSize * 0.95);
-    
-    // Determine face colors based on position
-    const materials = [
-        new THREE.MeshLambertMaterial({ color: x === 1 ? COLORS.red : COLORS.black }),    // Right (+X)
-        new THREE.MeshLambertMaterial({ color: x === -1 ? COLORS.orange : COLORS.black }), // Left (-X)
-        new THREE.MeshLambertMaterial({ color: y === 1 ? COLORS.white : COLORS.black }),   // Up (+Y)
-        new THREE.MeshLambertMaterial({ color: y === -1 ? COLORS.yellow : COLORS.black }), // Down (-Y)
-        new THREE.MeshLambertMaterial({ color: z === 1 ? COLORS.blue : COLORS.black }),    // Front (+Z)
-        new THREE.MeshLambertMaterial({ color: z === -1 ? COLORS.green : COLORS.black })   // Back (-Z)
-    ];
-
-    const cubie = new THREE.Mesh(geometry, materials);
-    cubie.position.set(x * totalSize, y * totalSize, z * totalSize);
-    
-    // Store logical position
-    cubie.userData.logicalPos = { x, y, z };
-    
-    return cubie;
+// Get cubies from the cube instance
+function getCubies() {
+    return rubiksCube.getCubies();
 }
 
 // Initialize the cube
 function initCube() {
-    // Clear existing cubies
-    cubies.forEach(cubie => cubeGroup.remove(cubie));
-    cubies = [];
-    moveHistory = [];
-    animationQueue = [];
-
-    // Create 27 cubies (3x3x3)
-    for (let x = -1; x <= 1; x++) {
-        for (let y = -1; y <= 1; y++) {
-            for (let z = -1; z <= 1; z++) {
-                const cubie = createCubie(x, y, z);
-                cubies.push(cubie);
-                cubeGroup.add(cubie);
-            }
-        }
-    }
-    
+    rubiksCube.initCube();
     updateStatus('Ready');
 }
 
 // Get cubies on a specific face
 function getCubiesOnFace(axis, value) {
-    return cubies.filter(cubie => {
-        const pos = cubie.position;
-        const tolerance = 0.1;
-        switch (axis) {
-            case 'x': return Math.abs(pos.x - value * totalSize) < tolerance;
-            case 'y': return Math.abs(pos.y - value * totalSize) < tolerance;
-            case 'z': return Math.abs(pos.z - value * totalSize) < tolerance;
-        }
-        return false;
-    });
+    return rubiksCube.getCubiesOnFace(axis, value);
 }
 
-// Rotate a face
+// Rotate a face - delegate to cube instance
 function rotateFace(axis, layer, direction, record = true, callback = null) {
-    if (isAnimating) {
-        animationQueue.push({ axis, layer, direction, record, callback });
-        return;
-    }
-
-    isAnimating = true;
-    const faceCubies = getCubiesOnFace(axis, layer);
-    
-    // Create a temporary group for rotation as a child of cubeGroup
-    // This ensures rotations work correctly even when cubeGroup is rotated by user
-    const rotationGroup = new THREE.Group();
-    cubeGroup.add(rotationGroup);
-    
-    // Add cubies to rotation group, preserving their local positions
-    faceCubies.forEach(cubie => {
-        const localPos = cubie.position.clone();
-        cubeGroup.remove(cubie);
-        rotationGroup.add(cubie);
-        cubie.position.copy(localPos);
-    });
-
-    const angle = direction * Math.PI / 2;
-    const duration = 200; // ms
-    const startTime = Date.now();
-
-    function animate() {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        // Easing function
-        const eased = 1 - Math.pow(1 - progress, 3);
-        
-        const currentAngle = angle * eased;
-        
-        switch (axis) {
-            case 'x':
-                rotationGroup.rotation.x = currentAngle;
-                break;
-            case 'y':
-                rotationGroup.rotation.y = currentAngle;
-                break;
-            case 'z':
-                rotationGroup.rotation.z = currentAngle;
-                break;
-        }
-
-        if (progress < 1) {
-            requestAnimationFrame(animate);
-        } else {
-            // Animation complete - update cubie positions
-            faceCubies.forEach(cubie => {
-                // Get the cubie's position in cubeGroup's local space
-                const pos = new THREE.Vector3();
-                cubie.getWorldPosition(pos);
-                cubeGroup.worldToLocal(pos);
-                
-                // Round to nearest grid position
-                pos.x = Math.round(pos.x / totalSize) * totalSize;
-                pos.y = Math.round(pos.y / totalSize) * totalSize;
-                pos.z = Math.round(pos.z / totalSize) * totalSize;
-                
-                // Get the cubie's world quaternion before moving it
-                const worldQuaternion = new THREE.Quaternion();
-                cubie.getWorldQuaternion(worldQuaternion);
-                
-                // Move cubie back to cubeGroup
-                rotationGroup.remove(cubie);
-                cubeGroup.add(cubie);
-                
-                // Set position and rotation
-                cubie.position.copy(pos);
-                
-                // Convert world quaternion to local quaternion relative to cubeGroup
-                const cubeGroupWorldQuaternion = new THREE.Quaternion();
-                cubeGroup.getWorldQuaternion(cubeGroupWorldQuaternion);
-                const invertedQuaternion = cubeGroupWorldQuaternion.clone().invert();
-                cubie.quaternion.copy(worldQuaternion).premultiply(invertedQuaternion);
-            });
-            
-            cubeGroup.remove(rotationGroup);
-            
-            if (record) {
-                moveHistory.push({ axis, layer, direction });
-            }
-            
-            isAnimating = false;
-            
-            if (callback) {
-                callback();
-            }
-            
-            // Process queue
-            if (animationQueue.length > 0) {
-                const next = animationQueue.shift();
-                rotateFace(next.axis, next.layer, next.direction, next.record, next.callback);
-            }
-        }
-    }
-
-    animate();
+    rubiksCube.rotateFace(axis, layer, direction, record, callback);
 }
 
-// Move definitions (standard notation)
-const MOVES = {
-    'R': { axis: 'x', layer: 1, direction: -1 },
-    "R'": { axis: 'x', layer: 1, direction: 1 },
-    'L': { axis: 'x', layer: -1, direction: 1 },
-    "L'": { axis: 'x', layer: -1, direction: -1 },
-    'U': { axis: 'y', layer: 1, direction: -1 },
-    "U'": { axis: 'y', layer: 1, direction: 1 },
-    'D': { axis: 'y', layer: -1, direction: 1 },
-    "D'": { axis: 'y', layer: -1, direction: -1 },
-    'F': { axis: 'z', layer: 1, direction: -1 },
-    "F'": { axis: 'z', layer: 1, direction: 1 },
-    'B': { axis: 'z', layer: -1, direction: 1 },
-    "B'": { axis: 'z', layer: -1, direction: -1 }
-};
-
-// Execute a move by name
+// Execute a move by name - delegate to cube instance
 function executeMove(moveName, record = true, callback = null) {
-    const move = MOVES[moveName];
-    if (move) {
-        rotateFace(move.axis, move.layer, move.direction, record, callback);
-    }
+    rubiksCube.executeMove(moveName, record, callback);
 }
 
 // Scramble the cube
 function scramble() {
-    if (isAnimating || animationQueue.length > 0) return;
-    
-    // Don't clear moveHistory - accumulate scramble moves with any existing manual moves
-    const moveNames = Object.keys(MOVES).filter(m => !m.includes("'"));
-    const scrambleMoves = [];
-    
-    // Generate 20 random moves
-    for (let i = 0; i < 20; i++) {
-        const randomMove = moveNames[Math.floor(Math.random() * moveNames.length)];
-        // Randomly add prime or not (50% chance each)
-        const move = Math.random() > 0.5 ? randomMove + "'" : randomMove;
-        scrambleMoves.push(move);
-    }
+    if (rubiksCube.getIsAnimating() || rubiksCube.getAnimationQueueLength() > 0) return;
     
     updateStatus('Scrambling...');
     disableButtons();
     
-    let index = 0;
-    function doNextMove() {
-        if (index < scrambleMoves.length) {
-            const move = scrambleMoves[index];
-            executeMove(move, true, () => {
-                index++;
-                doNextMove();
-            });
-        } else {
-            updateStatus('Scrambled! Click Solve to auto-solve');
-            enableButtons();
-        }
-    }
-    
-    doNextMove();
+    rubiksCube.scramble(() => {
+        updateStatus('Scrambled! Click Solve to auto-solve');
+        enableButtons();
+    });
 }
 
 // Solve the cube (reverse the moves)
 function solve() {
-    if (isAnimating || animationQueue.length > 0) return;
-    if (moveHistory.length === 0) {
-        updateStatus('Cube is already solved!');
-        return;
-    }
+    if (rubiksCube.getIsAnimating() || rubiksCube.getAnimationQueueLength() > 0) return;
     
     updateStatus('Solving...');
     disableButtons();
     
-    // Reverse the move history
-    const solveMoves = [...moveHistory].reverse();
-    moveHistory = [];
-    
-    let index = 0;
-    function doNextMove() {
-        if (index < solveMoves.length) {
-            const move = solveMoves[index];
-            // Reverse the direction
-            rotateFace(move.axis, move.layer, -move.direction, false, () => {
-                index++;
-                doNextMove();
-            });
+    rubiksCube.solve((alreadySolved) => {
+        if (alreadySolved) {
+            updateStatus('Cube is already solved!');
         } else {
             updateStatus('Solved! ✨');
-            enableButtons();
         }
-    }
-    
-    doNextMove();
+        enableButtons();
+    });
 }
 
 // Reset the cube
 function reset() {
-    if (isAnimating || animationQueue.length > 0) return;
-    initCube();
+    if (rubiksCube.getIsAnimating() || rubiksCube.getAnimationQueueLength() > 0) return;
+    rubiksCube.reset();
+    updateStatus('Ready');
 }
 
 // UI helpers
@@ -468,7 +175,7 @@ function getFaceFromMouse(mouseEvent) {
     raycaster.setFromCamera(mouse, camera);
     
     // Check intersection with all cubies
-    const intersects = raycaster.intersectObjects(cubies, true);
+    const intersects = raycaster.intersectObjects(getCubies(), true);
     
     if (intersects.length > 0) {
         const intersect = intersects[0];
@@ -643,9 +350,9 @@ function finalizeModifierFaceRotation(finalAngle) {
         cubie.getWorldPosition(pos);
         cubeGroup.worldToLocal(pos);
         
-        pos.x = Math.round(pos.x / totalSize) * totalSize;
-        pos.y = Math.round(pos.y / totalSize) * totalSize;
-        pos.z = Math.round(pos.z / totalSize) * totalSize;
+        pos.x = Math.round(pos.x / CUBE_TOTAL_SIZE) * CUBE_TOTAL_SIZE;
+        pos.y = Math.round(pos.y / CUBE_TOTAL_SIZE) * CUBE_TOTAL_SIZE;
+        pos.z = Math.round(pos.z / CUBE_TOTAL_SIZE) * CUBE_TOTAL_SIZE;
         
         const worldQuaternion = new THREE.Quaternion();
         cubie.getWorldQuaternion(worldQuaternion);
@@ -809,9 +516,9 @@ function calculateModifierRotationAngle(deltaX, deltaY, axis, layer, cubiePos) {
     const swipeVec = new THREE.Vector3().subVectors(worldPointMoved, worldPoint);
     
     const axisCenter = new THREE.Vector3();
-    if (axis === 'x') axisCenter.set(layer * totalSize, 0, 0);
-    else if (axis === 'y') axisCenter.set(0, layer * totalSize, 0);
-    else axisCenter.set(0, 0, layer * totalSize);
+    if (axis === 'x') axisCenter.set(layer * CUBE_TOTAL_SIZE, 0, 0);
+    else if (axis === 'y') axisCenter.set(0, layer * CUBE_TOTAL_SIZE, 0);
+    else axisCenter.set(0, 0, layer * CUBE_TOTAL_SIZE);
     cubeGroup.localToWorld(axisCenter);
     
     const radiusVec = new THREE.Vector3().subVectors(cubieWorldPos, axisCenter);
@@ -1119,7 +826,7 @@ function getFaceFromTouch(touch) {
     raycaster.setFromCamera(mouse, camera);
     
     // Check intersection with all cubies
-    const intersects = raycaster.intersectObjects(cubies, true);
+    const intersects = raycaster.intersectObjects(getCubies(), true);
     
     if (intersects.length > 0) {
         const intersect = intersects[0];
@@ -1319,9 +1026,9 @@ function finalizeFaceRotation(finalAngle) {
         cubeGroup.worldToLocal(pos);
         
         // Round to nearest grid position
-        pos.x = Math.round(pos.x / totalSize) * totalSize;
-        pos.y = Math.round(pos.y / totalSize) * totalSize;
-        pos.z = Math.round(pos.z / totalSize) * totalSize;
+        pos.x = Math.round(pos.x / CUBE_TOTAL_SIZE) * CUBE_TOTAL_SIZE;
+        pos.y = Math.round(pos.y / CUBE_TOTAL_SIZE) * CUBE_TOTAL_SIZE;
+        pos.z = Math.round(pos.z / CUBE_TOTAL_SIZE) * CUBE_TOTAL_SIZE;
         
         const worldQuaternion = new THREE.Quaternion();
         cubie.getWorldQuaternion(worldQuaternion);
@@ -1401,9 +1108,9 @@ function calculateSwipeDirection(touch, faceInfo) {
     
     // Get the center of the face in world space
     const faceCenter = new THREE.Vector3();
-    if (axis === 'x') faceCenter.set(layer * totalSize, 0, 0);
-    else if (axis === 'y') faceCenter.set(0, layer * totalSize, 0);
-    else faceCenter.set(0, 0, layer * totalSize);
+    if (axis === 'x') faceCenter.set(layer * CUBE_TOTAL_SIZE, 0, 0);
+    else if (axis === 'y') faceCenter.set(0, layer * CUBE_TOTAL_SIZE, 0);
+    else faceCenter.set(0, 0, layer * CUBE_TOTAL_SIZE);
     faceCenter.applyMatrix4(cubeGroup.matrixWorld);
     
     // Convert screen coordinates to 3D ray
@@ -1518,9 +1225,9 @@ function calculateTouchRotationAngle(deltaX, deltaY, axis, layer, cubiePos) {
     // Get the vector from rotation axis center to cubie position in world space
     // The axis center is the center of the face being rotated, on the rotation axis
     const axisCenter = new THREE.Vector3();
-    if (axis === 'x') axisCenter.set(layer * totalSize, 0, 0);
-    else if (axis === 'y') axisCenter.set(0, layer * totalSize, 0);
-    else axisCenter.set(0, 0, layer * totalSize);
+    if (axis === 'x') axisCenter.set(layer * CUBE_TOTAL_SIZE, 0, 0);
+    else if (axis === 'y') axisCenter.set(0, layer * CUBE_TOTAL_SIZE, 0);
+    else axisCenter.set(0, 0, layer * CUBE_TOTAL_SIZE);
     cubeGroup.localToWorld(axisCenter);
     
     // Vector from axis center to cubie
