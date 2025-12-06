@@ -378,6 +378,8 @@ function scramble() {
 }
 
 // Solve the cube (reset to solved state)
+// Note: This function now has the same effect as reset() but provides different UX feedback
+// to distinguish between "solving" (from scrambled state) and "resetting" (fresh start)
 function solve() {
     if (isAnimating || animationQueue.length > 0) return;
     
@@ -391,7 +393,7 @@ function solve() {
     enableButtons();
 }
 
-// Reset the cube
+// Reset the cube (instant reset to solved state)
 function reset() {
     if (isAnimating || animationQueue.length > 0) return;
     initCube();
