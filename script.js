@@ -345,7 +345,7 @@ function executeMove(moveName, record = true, callback = null) {
 function scramble() {
     if (isAnimating || animationQueue.length > 0) return;
     
-    moveHistory = [];
+    // Don't clear moveHistory - accumulate scramble moves with any existing manual moves
     const moveNames = Object.keys(MOVES).filter(m => !m.includes("'"));
     const scrambleMoves = [];
     
@@ -377,23 +377,40 @@ function scramble() {
     doNextMove();
 }
 
-// Solve the cube (reset to solved state)
-// Note: This function now has the same effect as reset() but provides different UX feedback
-// to distinguish between "solving" (from scrambled state) and "resetting" (fresh start)
+// Solve the cube (reverse the moves)
 function solve() {
     if (isAnimating || animationQueue.length > 0) return;
+    if (moveHistory.length === 0) {
+        updateStatus('Cube is already solved!');
+        return;
+    }
     
     updateStatus('Solving...');
     disableButtons();
     
-    // Reset cube to solved state
-    initCube();
+    // Reverse the move history
+    const solveMoves = [...moveHistory].reverse();
+    moveHistory = [];
     
-    updateStatus('Solved! ✨');
-    enableButtons();
+    let index = 0;
+    function doNextMove() {
+        if (index < solveMoves.length) {
+            const move = solveMoves[index];
+            // Reverse the direction
+            rotateFace(move.axis, move.layer, -move.direction, false, () => {
+                index++;
+                doNextMove();
+            });
+        } else {
+            updateStatus('Solved! ✨');
+            enableButtons();
+        }
+    }
+    
+    doNextMove();
 }
 
-// Reset the cube (instant reset to solved state)
+// Reset the cube
 function reset() {
     if (isAnimating || animationQueue.length > 0) return;
     initCube();
