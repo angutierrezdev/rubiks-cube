@@ -53,7 +53,8 @@ const totalSize = cubeSize + gap;
 // Touch rotation constants
 const CENTER_CUBIE_THRESHOLD = 0.01; // Distance threshold to consider a cubie on the rotation axis
 const TANGENT_ALIGNMENT_THRESHOLD = 0.1; // Threshold for tangent vector magnitude
-const TOUCH_ROTATION_SCALE = 2.0; // Scale factor for touch rotation sensitivity
+const TOUCH_ROTATION_SCALE = 2.0; // Converts world units to radians for touch rotation sensitivity
+const MIN_SWIPE_THRESHOLD = 1; // Minimum pixels of movement to register as a swipe
 
 // Move history for solving
 let moveHistory = [];
@@ -1010,7 +1011,7 @@ container.addEventListener('touchmove', (e) => {
             const deltaY = swipeTouch.clientY - touchState.swipeStartPos.y;
             const screenLength = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
             
-            if (screenLength > 1) {
+            if (screenLength > MIN_SWIPE_THRESHOLD) {
                 const { axis, layer, cubiePos } = faceInfo;
                 
                 // Calculate incremental angle using proper 3D geometry
