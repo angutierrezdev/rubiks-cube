@@ -58,6 +58,47 @@ const MIN_SWIPE_THRESHOLD = 1; // Minimum pixels of movement to register as a sw
 
 // Move history for solving
 let moveHistory = [];
+
+// Helper function to get a neighbor face for edge/corner cubies
+// Instead of rotating the clicked face, rotate an adjacent face the cubie belongs to
+function getNeighborFace(clickedAxis, clickedLayer, cubiePos) {
+    const tolerance = 0.1;
+    
+    // Determine all outer faces this cubie belongs to based on its position
+    // A cubie belongs to a face if its coordinate in that axis direction is at the edge (±totalSize)
+    const faces = [];
+    
+    if (Math.abs(cubiePos.x - totalSize) < tolerance) {
+        faces.push({ axis: 'x', layer: 1 });
+    }
+    if (Math.abs(cubiePos.x + totalSize) < tolerance) {
+        faces.push({ axis: 'x', layer: -1 });
+    }
+    if (Math.abs(cubiePos.y - totalSize) < tolerance) {
+        faces.push({ axis: 'y', layer: 1 });
+    }
+    if (Math.abs(cubiePos.y + totalSize) < tolerance) {
+        faces.push({ axis: 'y', layer: -1 });
+    }
+    if (Math.abs(cubiePos.z - totalSize) < tolerance) {
+        faces.push({ axis: 'z', layer: 1 });
+    }
+    if (Math.abs(cubiePos.z + totalSize) < tolerance) {
+        faces.push({ axis: 'z', layer: -1 });
+    }
+    
+    // Filter out the clicked face to get neighbor faces
+    const neighborFaces = faces.filter(f => !(f.axis === clickedAxis && f.layer === clickedLayer));
+    
+    // If there are neighbor faces (edge or corner cubie), return the first one
+    // If no neighbor faces (center cubie), return the original clicked face
+    if (neighborFaces.length > 0) {
+        return neighborFaces[0];
+    }
+    
+    // Fallback: return the clicked face (center cubie or unexpected case)
+    return { axis: clickedAxis, layer: clickedLayer };
+}
 let isAnimating = false;
 let animationQueue = [];
 
@@ -407,11 +448,16 @@ function getFaceFromMouse(mouseEvent) {
         // Check if this cubie is on the determined layer
         const faceCubies = getCubiesOnFace(axis, layer);
         if (faceCubies.includes(cubie)) {
+            // Get neighbor face for edge/corner cubies instead of the clicked face
+            const neighborFace = getNeighborFace(axis, layer, cubiePos);
+            const finalAxis = neighborFace.axis;
+            const finalLayer = neighborFace.layer;
+            
             // Transform normal to world space for rotation calculations
             const worldNormal = intersect.face.normal.clone();
             worldNormal.transformDirection(cubie.matrixWorld);
             
-            return { axis, layer, cubie, normal: localNormal, worldNormal: worldNormal, cubiePos: cubiePos };
+            return { axis: finalAxis, layer: finalLayer, cubie, normal: localNormal, worldNormal: worldNormal, cubiePos: cubiePos };
         }
     }
     
@@ -998,11 +1044,16 @@ function getFaceFromTouch(touch) {
         // Check if this cubie is on the determined layer
         const faceCubies = getCubiesOnFace(axis, layer);
         if (faceCubies.includes(cubie)) {
+            // Get neighbor face for edge/corner cubies instead of the clicked face
+            const neighborFace = getNeighborFace(axis, layer, cubiePos);
+            const finalAxis = neighborFace.axis;
+            const finalLayer = neighborFace.layer;
+            
             // Transform normal to world space for rotation calculations
             const worldNormal = intersect.face.normal.clone();
             worldNormal.transformDirection(cubie.matrixWorld);
             
-            return { axis, layer, cubie, normal: localNormal, worldNormal: worldNormal, cubiePos: cubiePos };
+            return { axis: finalAxis, layer: finalLayer, cubie, normal: localNormal, worldNormal: worldNormal, cubiePos: cubiePos };
         }
     }
     
