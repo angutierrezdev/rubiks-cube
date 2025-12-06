@@ -51,9 +51,6 @@ const gap = 0.05;
 const totalSize = cubeSize + gap;
 
 // Touch rotation constants
-const CENTER_CUBIE_THRESHOLD = 0.01; // Distance threshold to consider a cubie on the rotation axis
-const TANGENT_ALIGNMENT_THRESHOLD = 0.1; // Threshold for tangent vector magnitude
-const TOUCH_ROTATION_SCALE = 2.0; // Converts world units to radians for touch rotation sensitivity
 const MIN_SWIPE_THRESHOLD = 1; // Minimum pixels of movement to register as a swipe
 
 // Move history for solving
@@ -854,10 +851,9 @@ function calculateSimpleSwipeDirection(deltaX, deltaY, axis, layer) {
     return angle;
 }
 
-// Calculate incremental rotation angle from touch swipe using proper 3D geometry
-// This correctly handles all faces and all positions on each face
-// Uses incremental deltas to avoid 180-degree jumps when swiping in circular motions
-function calculateTouchRotationAngle(deltaX, deltaY, axis, layer, cubiePos) {
+// Calculate rotation angle by tracking the angular position of the finger around the rotation axis
+// This makes the cubie follow the finger directly - as you move your finger, the cubie tracks it
+function calculateTouchRotationAngle(prevX, prevY, currX, currY, axis, layer) {
     // Get the rotation axis in world space
     let rotationAxisLocal = new THREE.Vector3();
     if (axis === 'x') rotationAxisLocal.set(1, 0, 0);
@@ -867,69 +863,44 @@ function calculateTouchRotationAngle(deltaX, deltaY, axis, layer, cubiePos) {
     // Transform rotation axis to world space
     const rotationAxisWorld = rotationAxisLocal.clone().transformDirection(cubeGroup.matrixWorld);
     
-    // Get the cubie's world position
-    const cubieWorldPos = cubiePos.clone();
-    cubeGroup.localToWorld(cubieWorldPos);
-    
-    // Project the cubie position onto screen space to get the touch point
-    const screenPoint = cubieWorldPos.clone().project(camera);
-    
-    // Create a point offset by the swipe delta in screen space
-    const screenPointMoved = new THREE.Vector3(
-        screenPoint.x + (deltaX / window.innerWidth) * 2,
-        screenPoint.y - (deltaY / window.innerHeight) * 2,
-        screenPoint.z
-    );
-    
-    // Unproject both points to world space at the cubie's depth
-    const worldPoint = screenPoint.clone().unproject(camera);
-    const worldPointMoved = screenPointMoved.clone().unproject(camera);
-    
-    // Calculate the swipe vector in world space (not normalized, to preserve magnitude)
-    const swipeVec = new THREE.Vector3().subVectors(worldPointMoved, worldPoint);
-    
-    // Get the vector from rotation axis center to cubie position in world space
-    // The axis center is the center of the face being rotated, on the rotation axis
+    // Get the center of the rotating face in world space
     const axisCenter = new THREE.Vector3();
     if (axis === 'x') axisCenter.set(layer * totalSize, 0, 0);
     else if (axis === 'y') axisCenter.set(0, layer * totalSize, 0);
     else axisCenter.set(0, 0, layer * totalSize);
     cubeGroup.localToWorld(axisCenter);
     
-    // Vector from axis center to cubie
-    const radiusVec = new THREE.Vector3().subVectors(cubieWorldPos, axisCenter);
+    // Project the axis center to screen space
+    const axisCenterScreen = axisCenter.clone().project(camera);
+    const centerScreenX = (axisCenterScreen.x + 1) / 2 * window.innerWidth;
+    const centerScreenY = (1 - axisCenterScreen.y) / 2 * window.innerHeight;
     
-    // For center cubies (on the rotation axis), radiusVec is zero or very small
-    // In this case, we need a different approach: use the camera's view direction
-    const radiusLength = radiusVec.length();
-    let tangent;
+    // Calculate vectors from axis center to previous and current finger positions in screen space
+    const prevVecX = prevX - centerScreenX;
+    const prevVecY = prevY - centerScreenY;
+    const currVecX = currX - centerScreenX;
+    const currVecY = currY - centerScreenY;
     
-    if (radiusLength < CENTER_CUBIE_THRESHOLD) {
-        // Center cubie - create a tangent based on camera right direction
-        // The camera's right direction projected onto the face gives us a reasonable tangent
-        const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-        // Make tangent perpendicular to the rotation axis
-        tangent = new THREE.Vector3().crossVectors(rotationAxisWorld, cameraRight).normalize();
-        // If the cross product is too small (rotation axis aligned with camera right), use camera up
-        if (tangent.length() < TANGENT_ALIGNMENT_THRESHOLD) {
-            const cameraUp = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
-            tangent = new THREE.Vector3().crossVectors(rotationAxisWorld, cameraUp).normalize();
-        }
-    } else {
-        // Normal case - calculate tangent from cross product
-        tangent = new THREE.Vector3().crossVectors(rotationAxisWorld, radiusVec).normalize();
-    }
+    // Calculate the angular difference using atan2
+    // This gives us the actual angle the finger moved around the axis center
+    const prevAngle = Math.atan2(prevVecY, prevVecX);
+    const currAngle = Math.atan2(currVecY, currVecX);
     
-    // Project the swipe vector onto the tangent direction
-    // This gives us the component of swipe that contributes to rotation
-    // Using dot product preserves the sign based on direction alignment
-    const tangentComponent = swipeVec.dot(tangent);
+    // Calculate angular delta
+    let deltaAngle = currAngle - prevAngle;
     
-    // Convert the tangent component to an angle increment
-    // The tangent component is in world units, we scale it appropriately
-    const angle = tangentComponent * TOUCH_ROTATION_SCALE;
+    // Handle wrap-around at ±π
+    if (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
+    if (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
     
-    return angle;
+    // Determine if the rotation axis is pointing towards or away from the camera
+    // This affects whether screen-space rotation is clockwise or counter-clockwise in 3D
+    const cameraDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    const axisSign = rotationAxisWorld.dot(cameraDir) > 0 ? 1 : -1;
+    
+    // Return the angle with the correct sign
+    // The negative is because screen Y is inverted relative to 3D space
+    return -deltaAngle * axisSign;
 }
 
 container.addEventListener('touchstart', (e) => {
@@ -1005,23 +976,23 @@ container.addEventListener('touchmove', (e) => {
         if (swipeTouch && touchState.swipeStartFace) {
             const faceInfo = touchState.swipeStartFace;
             
-            // Calculate incremental delta from last position (not total from initial)
-            // This prevents 180-degree jumps when swiping in circular motions
+            // Calculate screen distance moved
             const deltaX = swipeTouch.clientX - touchState.swipeStartPos.x;
             const deltaY = swipeTouch.clientY - touchState.swipeStartPos.y;
             const screenLength = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
             
             if (screenLength > MIN_SWIPE_THRESHOLD) {
-                const { axis, layer, cubiePos } = faceInfo;
+                const { axis, layer } = faceInfo;
                 
-                // Calculate incremental angle using proper 3D geometry
-                // This works for all faces and all positions on each face
+                // Calculate rotation angle based on angular movement around the axis center
+                // This makes the cubie follow the finger directly
                 const deltaAngle = calculateTouchRotationAngle(
-                    deltaX, 
-                    deltaY, 
+                    touchState.swipeStartPos.x,
+                    touchState.swipeStartPos.y,
+                    swipeTouch.clientX,
+                    swipeTouch.clientY,
                     axis, 
-                    layer, 
-                    cubiePos
+                    layer
                 );
                 
                 // Accumulate rotation incrementally
