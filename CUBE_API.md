@@ -57,9 +57,6 @@ Object containing move definitions:
 ### CUBE_TOTAL_SIZE
 Number representing the size of each cubie including the gap (default: 1.05)
 
-### CUBE_CUBIE_POSITION_TOLERANCE
-Number for tolerance when determining face membership (default: 0.1)
-
 ## Public Methods
 
 ### initCube()
@@ -274,6 +271,29 @@ const selectedFace = rubiksCube.selectCornerNeighborBySwipeDirection(
 **Logic:**
 - Horizontal swipe (|deltaX| > |deltaY|): Selects Y-axis neighbor (top/bottom)
 - Vertical swipe: Selects non-Y neighbor (side faces)
+
+---
+
+### recordMove(axis, layer, direction)
+Record a move in the move history. Used for manually rotated faces (e.g., via touch/mouse drag) to track moves for solving.
+
+```javascript
+// Record a manual face rotation
+rubiksCube.recordMove('x', 1, -1);  // Right face clockwise
+
+// Record multiple moves
+rubiksCube.recordMove('y', 1, 1);   // Top face counter-clockwise
+rubiksCube.recordMove('z', 1, -1);  // Front face clockwise
+```
+
+**Parameters:**
+- `axis` (string): 'x', 'y', or 'z'
+- `layer` (number): 1 or -1 (which face)
+- `direction` (number): 1 or -1 (rotation direction)
+
+**Returns:** `void`
+
+**Note:** This is typically called automatically by `rotateFace()` and `executeMove()` when the `record` parameter is true. Use this method when implementing custom rotation logic outside the cube module.
 
 ## Usage Examples
 
