@@ -40,6 +40,7 @@ rubiks-cube/
 ### Mouse/Touch Controls
 - **Drag** - Rotate the cube view (works with mouse or touch)
 - **Scroll** - Zoom in/out (mouse wheel or pinch gesture)
+- **Cmd/Ctrl + Drag** - Lock cube and swipe to rotate individual faces (like two-finger touch on mobile)
 
 ### Keyboard Controls
 - **R, U, D, L, F, B** - Rotate the corresponding face (relative to current view)
