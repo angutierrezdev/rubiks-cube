@@ -354,6 +354,13 @@ class RubiksCube {
     getAnimationQueueLength() {
         return this.animationQueue.length;
     }
+
+    /**
+     * Record a move in the history (for external rotations)
+     */
+    recordMove(axis, layer, direction) {
+        this.moveHistory.push({ axis, layer, direction });
+    }
 }
 
 // Export for use in other scripts
@@ -362,5 +369,4 @@ if (typeof window !== 'undefined') {
     window.CUBE_COLORS = COLORS;
     window.CUBE_MOVES = MOVES;
     window.CUBE_TOTAL_SIZE = totalSize;
-    window.CUBE_CUBIE_POSITION_TOLERANCE = CUBIE_POSITION_TOLERANCE;
 }

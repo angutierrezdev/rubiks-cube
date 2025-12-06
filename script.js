@@ -57,9 +57,6 @@ function selectCornerNeighborBySwipeDirection(neighborFaces, deltaX, deltaY) {
     return rubiksCube.selectCornerNeighborBySwipeDirection(neighborFaces, deltaX, deltaY);
 }
 
-let isAnimating = false;
-let animationQueue = [];
-
 // Get cubies from the cube instance
 function getCubies() {
     return rubiksCube.getCubies();
@@ -374,28 +371,12 @@ function finalizeModifierFaceRotation(finalAngle) {
     // Record the move
     const normalizedTurns = ((quarterTurns % 4) + 4) % 4;
     if (normalizedTurns === 1) {
-        moveHistory.push({ 
-            axis: modifierKeyState.swipeAxis, 
-            layer: modifierKeyState.swipeLayer, 
-            direction: 1 
-        });
+        rubiksCube.recordMove(modifierKeyState.swipeAxis, modifierKeyState.swipeLayer, 1);
     } else if (normalizedTurns === 3) {
-        moveHistory.push({ 
-            axis: modifierKeyState.swipeAxis, 
-            layer: modifierKeyState.swipeLayer, 
-            direction: -1 
-        });
+        rubiksCube.recordMove(modifierKeyState.swipeAxis, modifierKeyState.swipeLayer, -1);
     } else if (normalizedTurns === 2) {
-        moveHistory.push({ 
-            axis: modifierKeyState.swipeAxis, 
-            layer: modifierKeyState.swipeLayer, 
-            direction: 1 
-        });
-        moveHistory.push({ 
-            axis: modifierKeyState.swipeAxis, 
-            layer: modifierKeyState.swipeLayer, 
-            direction: 1 
-        });
+        rubiksCube.recordMove(modifierKeyState.swipeAxis, modifierKeyState.swipeLayer, 1);
+        rubiksCube.recordMove(modifierKeyState.swipeAxis, modifierKeyState.swipeLayer, 1);
     }
     
     modifierKeyState.swipeAxis = null;
@@ -1052,30 +1033,14 @@ function finalizeFaceRotation(finalAngle) {
     const normalizedTurns = ((quarterTurns % 4) + 4) % 4;
     if (normalizedTurns === 1) {
         // 90° rotation
-        moveHistory.push({ 
-            axis: touchState.swipeAxis, 
-            layer: touchState.swipeLayer, 
-            direction: 1 
-        });
+        rubiksCube.recordMove(touchState.swipeAxis, touchState.swipeLayer, 1);
     } else if (normalizedTurns === 3) {
         // 270° rotation = -90° rotation
-        moveHistory.push({ 
-            axis: touchState.swipeAxis, 
-            layer: touchState.swipeLayer, 
-            direction: -1 
-        });
+        rubiksCube.recordMove(touchState.swipeAxis, touchState.swipeLayer, -1);
     } else if (normalizedTurns === 2) {
         // 180° rotation = two 90° rotations
-        moveHistory.push({ 
-            axis: touchState.swipeAxis, 
-            layer: touchState.swipeLayer, 
-            direction: 1 
-        });
-        moveHistory.push({ 
-            axis: touchState.swipeAxis, 
-            layer: touchState.swipeLayer, 
-            direction: 1 
-        });
+        rubiksCube.recordMove(touchState.swipeAxis, touchState.swipeLayer, 1);
+        rubiksCube.recordMove(touchState.swipeAxis, touchState.swipeLayer, 1);
     }
     // normalizedTurns === 0 means no rotation, so no move recorded
     
