@@ -82,9 +82,51 @@ function selectCornerNeighborBySwipeDirection(neighborFaces, deltaX, deltaY) {
 
 /**
  * Selects which middle slice to rotate for a center cubie based on swipe direction.
+ * This function transforms the clicked face to screen-relative coordinates before
+ * determining the middle slice to rotate.
  */
 function selectCenterSliceBySwipeDirection(clickedAxis, clickedLayer, deltaX, deltaY) {
-    return rubiksCube.selectCenterSliceBySwipeDirection(clickedAxis, clickedLayer, deltaX, deltaY);
+    // Transform the clicked face axis/layer to screen-relative orientation
+    // to correctly map screen swipes to cube rotations
+    const screenRelativeFace = getScreenRelativeFace(clickedAxis, clickedLayer);
+    return rubiksCube.selectCenterSliceBySwipeDirection(screenRelativeFace.axis, screenRelativeFace.layer, deltaX, deltaY);
+}
+
+/**
+ * Transforms a cube-local face (axis, layer) to screen-relative coordinates
+ * based on the current cube rotation.
+ */
+function getScreenRelativeFace(axis, layer) {
+    // Create a vector pointing in the direction of the clicked face
+    const faceVector = new THREE.Vector3(
+        axis === 'x' ? layer : 0,
+        axis === 'y' ? layer : 0,
+        axis === 'z' ? layer : 0
+    );
+    
+    // Transform to world space using cube's current rotation
+    const cubeQuaternion = new THREE.Quaternion();
+    cubeGroup.getWorldQuaternion(cubeQuaternion);
+    faceVector.applyQuaternion(cubeQuaternion);
+    
+    // Determine which axis is dominant in screen space
+    const absX = Math.abs(faceVector.x);
+    const absY = Math.abs(faceVector.y);
+    const absZ = Math.abs(faceVector.z);
+    
+    let screenAxis, screenLayer;
+    if (absX >= absY && absX >= absZ) {
+        screenAxis = 'x';
+        screenLayer = faceVector.x > 0 ? 1 : -1;
+    } else if (absY >= absZ) {
+        screenAxis = 'y';
+        screenLayer = faceVector.y > 0 ? 1 : -1;
+    } else {
+        screenAxis = 'z';
+        screenLayer = faceVector.z > 0 ? 1 : -1;
+    }
+    
+    return { axis: screenAxis, layer: screenLayer };
 }
 
 // Get cubies from the cube instance
