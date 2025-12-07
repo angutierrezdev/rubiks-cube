@@ -1,6 +1,11 @@
 // UI Controller Module
 // This module handles all UI updates and status management,
 // following the Single Responsibility Principle (SRP)
+//
+// SOLID Principles Applied:
+// - SRP: Single responsibility - manage UI elements and status
+// - ISP: Provides focused interface for UI operations
+// - DIP: UI logic separated from business logic
 
 /**
  * UIController class - manages UI elements and status updates

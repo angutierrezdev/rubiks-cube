@@ -1,6 +1,11 @@
 // Camera Controller Module
 // This module handles camera controls and view management,
 // following the Single Responsibility Principle (SRP)
+//
+// SOLID Principles Applied:
+// - SRP: Single responsibility - camera and view control
+// - ISP: Provides focused interface for camera operations
+// - OCP: Can be extended with new camera behaviors
 
 /**
  * CameraController class - manages camera position and orientation

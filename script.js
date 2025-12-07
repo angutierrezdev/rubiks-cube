@@ -1,4 +1,16 @@
 // Rubik's Cube Simulation
+// Main application entry point
+//
+// This file integrates all SOLID-principle modules:
+// - UIController (SRP) - UI management
+// - CameraController (SRP) - Camera controls
+// - HighlightManager (SRP) - Visual feedback
+// - TouchHandler (SRP) - Gesture handling
+// - RotationStrategy (OCP) - Extensible rotation logic
+// - CubeRenderer (DIP) - Rendering abstraction
+//
+// Architecture follows SOLID principles for maintainability and extensibility
+
 const container = document.getElementById('container');
 
 // Initialize UI Controller (SRP - Single Responsibility for UI management)

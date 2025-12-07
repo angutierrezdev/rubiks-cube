@@ -21,12 +21,26 @@ A fully functional 3D Rubik's Cube simulation built with Three.js. Features smoo
 ```
 rubiks-cube/
 ├── index.html      # Main HTML file with UI structure
-├── cube.js         # Core cube logic and state management (NEW)
-├── script.js       # Three.js visualization and user interaction
+├── cube.js         # Core cube logic and state management
+├── script.js       # Main application with Three.js visualization and user interaction
 ├── styles.css      # Styling and responsive design
-├── README.md       # This file
-└── LICENSE         # MIT License
+│
+├── SOLID Principle Modules (NEW):
+├── cubeRenderer.js      # Rendering abstraction (DIP)
+├── rotationStrategy.js  # Rotation strategies (OCP)
+├── uiController.js      # UI management (SRP)
+├── cameraController.js  # Camera controls (SRP)
+├── highlightManager.js  # Visual feedback (SRP)
+├── touchHandler.js      # Touch/mouse gestures (SRP)
+│
+├── Documentation:
+├── README.md           # This file
+├── SOLID_REFACTORING.md # Detailed SOLID refactoring documentation
+├── CUBE_API.md         # Cube API documentation
+└── LICENSE             # MIT License
 ```
+
+**Note**: The codebase has been refactored to follow SOLID principles. See [SOLID_REFACTORING.md](SOLID_REFACTORING.md) for detailed documentation on the architectural improvements.
 
 ## How to Use
 
@@ -57,24 +71,39 @@ rubiks-cube/
 
 ### Architecture
 
-The application follows a **modular architecture** with clear separation of concerns:
+The application follows a **modular architecture with SOLID principles**:
 
 - **Three.js v0.128.0** - Loaded via CDN for 3D rendering
 - **Separation of Concerns**:
-  - `cube.js` - Pure cube logic (state, moves, algorithms) - 366 lines
-  - `script.js` - UI and visualization (Three.js, events, rendering) - 1724 lines
+  - `cube.js` - Pure cube logic (state, moves, algorithms) - 372 lines
+  - `script.js` - Main application integration - 1689 lines
+  - **SOLID Modules** (NEW):
+    - `cubeRenderer.js` - Rendering abstraction (DIP)
+    - `rotationStrategy.js` - Strategy pattern for rotation (OCP)
+    - `uiController.js` - UI management (SRP)
+    - `cameraController.js` - Camera controls (SRP)
+    - `highlightManager.js` - Visual feedback (SRP)
+    - `touchHandler.js` - Gesture handling (SRP)
 - **RubiksCube Class** - Encapsulates all cube operations with a clean API
 - **3x3x3 Cube Model** - 27 individual cubies (3×3×3 grid)
 - **Animation System** - Queue-based system prevents move conflicts
 - **Move History** - Tracks all moves for auto-solve functionality
 
+See [SOLID_REFACTORING.md](SOLID_REFACTORING.md) for detailed architectural documentation.
+
 ### Benefits of the Modular Design
 
 1. **Maintainability**: Cube logic and UI code are independent
 2. **Testability**: Cube logic can be tested without UI
-3. **Reusability**: `cube.js` can work with different rendering systems
+3. **Reusability**: Modules can work with different rendering systems
 4. **Clarity**: Well-defined API between modules
-5. **Extensibility**: Easy to add new features to either module
+5. **Extensibility**: Easy to add new features to any module
+6. **SOLID Principles**: Architecture follows industry best practices
+   - **SRP**: Each module has a single, well-defined responsibility
+   - **OCP**: Open for extension, closed for modification (Strategy pattern)
+   - **DIP**: Depends on abstractions, not concrete implementations
+
+For detailed SOLID principles documentation, see [SOLID_REFACTORING.md](SOLID_REFACTORING.md).
 
 ### Cube Colors (Standard Rubik's Cube)
 - **White** - Up face (Y+)

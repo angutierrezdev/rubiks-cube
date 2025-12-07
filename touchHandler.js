@@ -1,6 +1,11 @@
 // Touch and Mouse Handler Module
 // This module handles all touch and mouse gesture interactions,
 // following the Single Responsibility Principle (SRP)
+//
+// SOLID Principles Applied:
+// - SRP: Single responsibility - touch/mouse gesture handling
+// - ISP: Focused interface for gesture operations
+// - DIP: Depends on cube abstraction, not concrete implementation
 
 /**
  * TouchHandler class - manages touch and mouse input for face rotation

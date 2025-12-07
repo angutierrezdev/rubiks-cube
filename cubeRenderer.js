@@ -1,6 +1,11 @@
 // Cube Renderer Abstraction Layer
 // This module provides an abstraction for rendering operations,
 // following the Dependency Inversion Principle (DIP)
+//
+// SOLID Principles Applied:
+// - DIP: High-level cube logic depends on ICubeRenderer abstraction, not concrete Three.js
+// - OCP: New rendering implementations can be added by extending ICubeRenderer
+// - SRP: This module has single responsibility - rendering abstraction
 
 /**
  * Abstract interface for cube rendering operations

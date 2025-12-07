@@ -1,6 +1,11 @@
 // Highlight Manager Module
 // This module handles visual feedback for cube interactions,
 // following the Single Responsibility Principle (SRP)
+//
+// SOLID Principles Applied:
+// - SRP: Single responsibility - manage visual highlighting
+// - ISP: Focused interface for highlighting operations
+// - OCP: Can be extended with new highlight effects
 
 /**
  * HighlightManager class - manages cubie highlighting for visual feedback

@@ -1,6 +1,11 @@
 // Rotation Strategy Module
 // This module implements the Strategy pattern for rotation direction calculation,
 // following the Open/Closed Principle (OCP)
+//
+// SOLID Principles Applied:
+// - OCP: New rotation behaviors can be added without modifying existing code
+// - SRP: This module has single responsibility - rotation direction calculation
+// - DIP: Strategies depend on abstractions, not concrete implementations
 
 /**
  * Base strategy class for calculating rotation direction
