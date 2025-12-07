@@ -6,6 +6,9 @@
 // - SRP: Single responsibility - manage visual highlighting
 // - ISP: Focused interface for highlighting operations
 // - OCP: Can be extended with new highlight effects
+//
+// Note: Current implementation uses Three.js for color objects. In a production system,
+// consider accepting a color factory as a dependency for complete Three.js independence.
 
 /**
  * HighlightManager class - manages cubie highlighting for visual feedback

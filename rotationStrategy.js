@@ -6,6 +6,9 @@
 // - OCP: New rotation behaviors can be added without modifying existing code
 // - SRP: This module has single responsibility - rotation direction calculation
 // - DIP: Strategies depend on abstractions, not concrete implementations
+//
+// Note: Current implementation uses Three.js for vector math. In a production system,
+// consider abstracting vector operations for complete Three.js independence.
 
 /**
  * Base strategy class for calculating rotation direction

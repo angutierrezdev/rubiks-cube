@@ -6,6 +6,9 @@
 // - SRP: Single responsibility - touch/mouse gesture handling
 // - ISP: Focused interface for gesture operations
 // - DIP: Depends on cube abstraction, not concrete implementation
+//
+// Note: Current implementation uses Three.js for color objects. In a production system,
+// consider injecting a color factory for complete Three.js independence.
 
 /**
  * TouchHandler class - manages touch and mouse input for face rotation

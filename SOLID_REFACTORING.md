@@ -285,6 +285,8 @@ All existing functionality is preserved:
 - Extract keyboard controls into KeyboardController
 
 ### Medium Priority
+- **Abstract vector operations**: Extract Three.js vector math into a math abstraction layer
+- **Inject color factory**: Replace direct THREE.Color usage with injected color factory
 - Add TypeScript for type safety
 - Create unit tests for each module
 - Implement dependency injection container
@@ -295,6 +297,21 @@ All existing functionality is preserved:
 - Implement Command pattern for move history
 - Add State pattern for animation states
 - Create comprehensive API documentation
+
+## Notes on Three.js Dependencies
+
+While the architecture follows SOLID principles, some modules still have direct Three.js dependencies for pragmatic reasons:
+
+- **rotationStrategy.js**: Uses Three.js vector classes (Vector2, Vector3) for math operations
+- **touchHandler.js**: Uses THREE.Color for material highlighting
+- **highlightManager.js**: Uses THREE.Color for color manipulation
+
+**Future Enhancement**: These dependencies could be eliminated by:
+1. Creating a `mathLib.js` abstraction for vector operations
+2. Injecting a `ColorFactory` dependency instead of using THREE.Color directly
+3. Using plain objects for colors and vectors with utility functions
+
+This would achieve complete dependency inversion but was deemed unnecessary for this refactoring phase, as the primary goal was to demonstrate SOLID principles and improve architecture without over-engineering.
 
 ## Migration Notes
 

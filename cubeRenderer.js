@@ -88,13 +88,15 @@ class ThreeJSRenderer extends ICubeRenderer {
         this.gap = gap;
         this.totalSize = cubeSize + gap;
         this.colors = colors;
+        // Cubie size factor - slightly smaller than grid to show gaps
+        this.CUBIE_SIZE_FACTOR = 0.95;
     }
 
     createCubie(x, y, z) {
         const geometry = new THREE.BoxGeometry(
-            this.cubeSize * 0.95,
-            this.cubeSize * 0.95,
-            this.cubeSize * 0.95
+            this.cubeSize * this.CUBIE_SIZE_FACTOR,
+            this.cubeSize * this.CUBIE_SIZE_FACTOR,
+            this.cubeSize * this.CUBIE_SIZE_FACTOR
         );
         
         const materials = [
