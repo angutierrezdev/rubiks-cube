@@ -52,24 +52,33 @@ function getColorHexString(colorNum) {
 }
 
 // Helper function to get face color from cubie and face normal
-function getFaceColor(cubie, axis, layer) {
+function getFaceColor(cubie, axis, layer, materialIndex) {
     if (!cubie || !cubie.material) return null;
     
     const materials = Array.isArray(cubie.material) ? cubie.material : [cubie.material];
     
-    // Map axis/layer to material index
-    // Materials order: [right(x+), left(x-), top(y+), bottom(y-), front(z+), back(z-)]
-    let materialIndex = 0;
-    if (axis === 'x') {
-        materialIndex = layer > 0 ? 0 : 1;
-    } else if (axis === 'y') {
-        materialIndex = layer > 0 ? 2 : 3;
-    } else if (axis === 'z') {
-        materialIndex = layer > 0 ? 4 : 5;
+    // Use the materialIndex from raycasting if available
+    if (materialIndex !== undefined && materialIndex < materials.length) {
+        const color = materials[materialIndex].color;
+        return {
+            hex: color.getHex(),
+            name: getColorNameFromHex(color.getHex())
+        };
     }
     
-    if (materialIndex < materials.length) {
-        const color = materials[materialIndex].color;
+    // Fallback: Map axis/layer to material index
+    // Materials order: [right(x+), left(x-), top(y+), bottom(y-), front(z+), back(z-)]
+    let fallbackIndex = 0;
+    if (axis === 'x') {
+        fallbackIndex = layer > 0 ? 0 : 1;
+    } else if (axis === 'y') {
+        fallbackIndex = layer > 0 ? 2 : 3;
+    } else if (axis === 'z') {
+        fallbackIndex = layer > 0 ? 4 : 5;
+    }
+    
+    if (fallbackIndex < materials.length) {
+        const color = materials[fallbackIndex].color;
         return {
             hex: color.getHex(),
             name: getColorNameFromHex(color.getHex())
@@ -129,7 +138,7 @@ function updateDebugPanel(faceInfo, deltaX = 0, deltaY = 0) {
     debugPanel.face.textContent = getFaceName(faceInfo.axis, faceInfo.layer);
     
     // Update color
-    const faceColor = getFaceColor(faceInfo.cubie, faceInfo.axis, faceInfo.layer);
+    const faceColor = getFaceColor(faceInfo.cubie, faceInfo.axis, faceInfo.layer, faceInfo.materialIndex);
     if (faceColor) {
         debugPanel.colorIndicator.style.backgroundColor = getColorHexString(faceColor.hex);
         debugPanel.colorName.textContent = faceColor.name;
@@ -419,7 +428,8 @@ function getFaceFromMouse(mouseEvent) {
                 worldNormal: worldNormal, 
                 cubiePos: cubiePos,
                 cubieType,
-                neighborFaces
+                neighborFaces,
+                materialIndex: intersect.face.materialIndex // Add material index from raycasting
             };
         }
     }
@@ -1107,7 +1117,8 @@ function getFaceFromTouch(touch) {
                 worldNormal: worldNormal, 
                 cubiePos: cubiePos,
                 cubieType,
-                neighborFaces
+                neighborFaces,
+                materialIndex: intersect.face.materialIndex // Add material index from raycasting
             };
         }
     }
