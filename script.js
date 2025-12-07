@@ -454,6 +454,9 @@ function finalizeModifierFaceRotation(finalAngle) {
     modifierKeyState.swipeAxis = null;
     modifierKeyState.swipeLayer = null;
     modifierKeyState.currentRotation = 0;
+    
+    // Update front face indicator after rotation completes
+    updateFrontFaceIndicator();
 }
 
 // Highlight a cubie for modifier key mode
@@ -1152,6 +1155,9 @@ function finalizeFaceRotation(finalAngle) {
     touchState.swipeAxis = null;
     touchState.swipeLayer = null;
     touchState.currentRotation = 0;
+    
+    // Update front face indicator after rotation completes
+    updateFrontFaceIndicator();
 }
 
 // Calculate swipe direction relative to face

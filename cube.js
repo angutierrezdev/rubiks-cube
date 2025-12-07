@@ -120,23 +120,35 @@ class RubiksCube {
     selectCenterSliceBySwipeDirection(clickedAxis, clickedLayer, deltaX, deltaY) {
         const isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
         
-        // For all faces:
-        // - Horizontal swipe (left-right on screen) -> rotate middle horizontal slice (Y axis, layer 0)
-        // - Vertical swipe (up-down on screen) -> rotate appropriate vertical middle slice
+        // For center cubies, determine which middle slice to rotate based on:
+        // 1. Which face was clicked (in screen-relative coordinates)
+        // 2. The swipe direction (horizontal or vertical)
         
-        if (isHorizontalSwipe) {
-            // Horizontal swipe always rotates the Y-axis middle slice (horizontal slice)
-            return { axis: 'y', layer: 0 };
-        } else {
-            // Vertical swipe rotates different axes depending on which face is clicked
-            if (clickedAxis === 'y') {
-                // Top or bottom face - vertical swipe rotates Z-axis middle slice
+        if (clickedAxis === 'y') {
+            // Top or bottom face
+            if (isHorizontalSwipe) {
+                // Horizontal swipe on top/bottom -> rotate X-axis middle slice
+                return { axis: 'x', layer: 0 };
+            } else {
+                // Vertical swipe on top/bottom -> rotate Z-axis middle slice
                 return { axis: 'z', layer: 0 };
-            } else if (clickedAxis === 'x') {
-                // Left or right face - vertical swipe rotates Z-axis middle slice
+            }
+        } else if (clickedAxis === 'x') {
+            // Left or right face
+            if (isHorizontalSwipe) {
+                // Horizontal swipe on left/right -> rotate Y-axis middle slice
+                return { axis: 'y', layer: 0 };
+            } else {
+                // Vertical swipe on left/right -> rotate Z-axis middle slice
                 return { axis: 'z', layer: 0 };
-            } else if (clickedAxis === 'z') {
-                // Front or back face - vertical swipe rotates X-axis middle slice
+            }
+        } else if (clickedAxis === 'z') {
+            // Front or back face
+            if (isHorizontalSwipe) {
+                // Horizontal swipe on front/back -> rotate Y-axis middle slice
+                return { axis: 'y', layer: 0 };
+            } else {
+                // Vertical swipe on front/back -> rotate X-axis middle slice
                 return { axis: 'x', layer: 0 };
             }
         }
