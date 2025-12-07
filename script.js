@@ -1,11 +1,15 @@
 // Rubik's Cube Simulation
 const container = document.getElementById('container');
-const scrambleBtn = document.getElementById('scrambleBtn');
-const solveBtn = document.getElementById('solveBtn');
-const resetBtn = document.getElementById('resetBtn');
-const statusEl = document.getElementById('status');
-const frontFaceColorEl = document.getElementById('front-face-color');
-const frontFaceNameEl = document.getElementById('front-face-name');
+
+// Initialize UI Controller (SRP - Single Responsibility for UI management)
+const uiController = new UIController({
+    statusEl: document.getElementById('status'),
+    scrambleBtn: document.getElementById('scrambleBtn'),
+    solveBtn: document.getElementById('solveBtn'),
+    resetBtn: document.getElementById('resetBtn'),
+    frontFaceColorEl: document.getElementById('front-face-color'),
+    frontFaceNameEl: document.getElementById('front-face-name')
+});
 
 // Scene setup
 const scene = new THREE.Scene();
@@ -36,6 +40,13 @@ scene.add(cubeGroup);
 
 // Initialize the cube logic
 const rubiksCube = new RubiksCube(cubeGroup);
+
+// Initialize modules following SOLID principles
+// HighlightManager - SRP: manages visual feedback
+const highlightManager = new HighlightManager();
+
+// CameraController - SRP: manages camera and view controls
+const cameraController = new CameraController(camera, cubeGroup, container);
 
 // Touch rotation constants
 const CENTER_CUBIE_THRESHOLD = 0.01;
@@ -87,12 +98,12 @@ function executeMove(moveName, record = true, callback = null) {
 function scramble() {
     if (rubiksCube.getIsAnimating() || rubiksCube.getAnimationQueueLength() > 0) return;
     
-    updateStatus('Scrambling...');
-    disableButtons();
+    uiController.updateStatus('Scrambling...');
+    uiController.disableButtons();
     
     rubiksCube.scramble(() => {
-        updateStatus('Scrambled! Click Solve to auto-solve');
-        enableButtons();
+        uiController.updateStatus('Scrambled! Click Solve to auto-solve');
+        uiController.enableButtons();
     });
 }
 
@@ -100,16 +111,16 @@ function scramble() {
 function solve() {
     if (rubiksCube.getIsAnimating() || rubiksCube.getAnimationQueueLength() > 0) return;
     
-    updateStatus('Solving...');
-    disableButtons();
+    uiController.updateStatus('Solving...');
+    uiController.disableButtons();
     
     rubiksCube.solve((alreadySolved) => {
         if (alreadySolved) {
-            updateStatus('Cube is already solved!');
+            uiController.updateStatus('Cube is already solved!');
         } else {
-            updateStatus('Solved! ✨');
+            uiController.updateStatus('Solved! ✨');
         }
-        enableButtons();
+        uiController.enableButtons();
     });
 }
 
@@ -117,30 +128,21 @@ function solve() {
 function reset() {
     if (rubiksCube.getIsAnimating() || rubiksCube.getAnimationQueueLength() > 0) return;
     rubiksCube.reset();
-    updateStatus('Ready');
+    uiController.updateStatus('Ready');
 }
 
-// UI helpers
-function updateStatus(text) {
-    statusEl.textContent = text;
+// Initialize the cube
+function initCube() {
+    rubiksCube.initCube();
+    uiController.updateStatus('Ready');
 }
 
-function disableButtons() {
-    scrambleBtn.disabled = true;
-    solveBtn.disabled = true;
-    resetBtn.disabled = true;
-}
-
-function enableButtons() {
-    scrambleBtn.disabled = false;
-    solveBtn.disabled = false;
-    resetBtn.disabled = false;
-}
-
-// Event listeners
-scrambleBtn.addEventListener('click', scramble);
-solveBtn.addEventListener('click', solve);
-resetBtn.addEventListener('click', reset);
+// Setup UI event listeners (using UIController - SRP)
+uiController.setupButtonListeners({
+    scramble: scramble,
+    solve: solve,
+    reset: reset
+});
 
 // Mouse controls for rotating the view
 let isDragging = false;
@@ -1571,12 +1573,9 @@ const FACE_COLORS = {
     'green': { hex: '#00ff00', name: 'Green' }
 };
 
-// Helper to get inverse quaternion from cube rotation
+// Helper to get inverse quaternion from cube rotation  
 function getCubeInverseQuaternion() {
-    const rotation = cubeGroup.rotation;
-    const quaternion = new THREE.Quaternion();
-    quaternion.setFromEuler(rotation);
-    return quaternion.invert();
+    return cameraController.getCubeInverseQuaternion();
 }
 
 // Helper to determine which face a transformed vector points to
@@ -1605,19 +1604,18 @@ function getCurrentFrontFace() {
 function updateFrontFaceIndicator() {
     const face = getCurrentFrontFace();
     const faceInfo = FACE_COLORS[face];
-    frontFaceColorEl.style.backgroundColor = faceInfo.hex;
-    frontFaceNameEl.textContent = faceInfo.name;
+    uiController.updateFrontFaceIndicator(faceInfo);
 }
 
 // Call update on mouse/touch movements
 container.addEventListener('mousemove', () => {
-    if (isDragging) {
+    if (cameraController.getIsDragging()) {
         updateFrontFaceIndicator();
     }
 });
 
 container.addEventListener('touchmove', () => {
-    if (isDragging) {
+    if (cameraController.getIsDragging()) {
         updateFrontFaceIndicator();
     }
 });
