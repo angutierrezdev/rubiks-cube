@@ -87,7 +87,9 @@ function selectCornerNeighborBySwipeDirection(neighborFaces, deltaX, deltaY) {
  */
 function selectCenterSliceBySwipeDirection(clickedAxis, clickedLayer, deltaX, deltaY) {
     // Transform the clicked face axis/layer to screen-relative orientation
-    // to correctly map screen swipes to cube rotations
+    // to correctly map screen swipes to cube rotations.
+    // Note: The underlying function uses only the axis to determine which middle slice (layer 0)
+    // to rotate, so the transformed layer value is not critical for the main logic paths.
     const screenRelativeFace = getScreenRelativeFace(clickedAxis, clickedLayer);
     return rubiksCube.selectCenterSliceBySwipeDirection(screenRelativeFace.axis, screenRelativeFace.layer, deltaX, deltaY);
 }
@@ -118,6 +120,7 @@ function getScreenRelativeFace(axis, layer) {
     const absY = Math.abs(faceVector.y);
     const absZ = Math.abs(faceVector.z);
     
+    // Default to z-axis (front/back) - this should always be overridden by one of the conditions below
     let screenAxis = 'z';
     let screenLayer = 1;
     
