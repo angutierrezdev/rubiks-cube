@@ -525,10 +525,18 @@ function calculateModifierRotationAngle(deltaX, deltaY, axis, layer, cubiePos) {
     
     const radiusVec = new THREE.Vector3().subVectors(cubieWorldPos, axisCenter);
     
-    const radiusLength = radiusVec.length();
+    // Calculate perpendicular distance from rotation axis
+    // Project radiusVec onto rotation axis to get parallel component
+    const parallelComponent = radiusVec.dot(rotationAxisWorld);
+    const parallelVec = rotationAxisWorld.clone().multiplyScalar(parallelComponent);
+    // Perpendicular component is what's left
+    const perpVec = new THREE.Vector3().subVectors(radiusVec, parallelVec);
+    const perpDistance = perpVec.length();
     let tangent;
     
-    if (radiusLength < CENTER_CUBIE_THRESHOLD) {
+    if (perpDistance < CENTER_CUBIE_THRESHOLD) {
+        // Cubie is on or very close to the rotation axis
+        // Create a tangent based on camera right direction
         const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
         tangent = new THREE.Vector3().crossVectors(rotationAxisWorld, cameraRight).normalize();
         if (tangent.length() < TANGENT_ALIGNMENT_THRESHOLD) {
@@ -536,7 +544,8 @@ function calculateModifierRotationAngle(deltaX, deltaY, axis, layer, cubiePos) {
             tangent = new THREE.Vector3().crossVectors(rotationAxisWorld, cameraUp).normalize();
         }
     } else {
-        tangent = new THREE.Vector3().crossVectors(rotationAxisWorld, radiusVec).normalize();
+        // Use perpendicular vector for tangent calculation
+        tangent = new THREE.Vector3().crossVectors(rotationAxisWorld, perpVec).normalize();
     }
     
     const tangentComponent = swipeVec.dot(tangent);
@@ -1242,14 +1251,18 @@ function calculateTouchRotationAngle(deltaX, deltaY, axis, layer, cubiePos) {
     // Vector from axis center to cubie
     const radiusVec = new THREE.Vector3().subVectors(cubieWorldPos, axisCenter);
     
-    // For center cubies (on the rotation axis), radiusVec is zero or very small
-    // In this case, we need a different approach: use the camera's view direction
-    const radiusLength = radiusVec.length();
+    // Calculate perpendicular distance from rotation axis
+    // Project radiusVec onto rotation axis to get parallel component
+    const parallelComponent = radiusVec.dot(rotationAxisWorld);
+    const parallelVec = rotationAxisWorld.clone().multiplyScalar(parallelComponent);
+    // Perpendicular component is what's left
+    const perpVec = new THREE.Vector3().subVectors(radiusVec, parallelVec);
+    const perpDistance = perpVec.length();
     let tangent;
     
-    if (radiusLength < CENTER_CUBIE_THRESHOLD) {
-        // Center cubie - create a tangent based on camera right direction
-        // The camera's right direction projected onto the face gives us a reasonable tangent
+    if (perpDistance < CENTER_CUBIE_THRESHOLD) {
+        // Cubie is on or very close to the rotation axis
+        // Create a tangent based on camera right direction
         const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
         // Make tangent perpendicular to the rotation axis
         tangent = new THREE.Vector3().crossVectors(rotationAxisWorld, cameraRight).normalize();
@@ -1259,8 +1272,8 @@ function calculateTouchRotationAngle(deltaX, deltaY, axis, layer, cubiePos) {
             tangent = new THREE.Vector3().crossVectors(rotationAxisWorld, cameraUp).normalize();
         }
     } else {
-        // Normal case - calculate tangent from cross product
-        tangent = new THREE.Vector3().crossVectors(rotationAxisWorld, radiusVec).normalize();
+        // Use perpendicular vector for tangent calculation
+        tangent = new THREE.Vector3().crossVectors(rotationAxisWorld, perpVec).normalize();
     }
     
     // Project the swipe vector onto the tangent direction
