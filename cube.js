@@ -114,6 +114,38 @@ class RubiksCube {
     }
 
     /**
+     * Selects which middle slice to rotate for a center cubie based on swipe direction.
+     * For center cubies, horizontal swipe rotates horizontal slice, vertical swipe rotates vertical slice.
+     */
+    selectCenterSliceBySwipeDirection(clickedAxis, clickedLayer, deltaX, deltaY) {
+        const isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
+        
+        // For all faces:
+        // - Horizontal swipe (left-right on screen) -> rotate middle horizontal slice (Y axis, layer 0)
+        // - Vertical swipe (up-down on screen) -> rotate appropriate vertical middle slice
+        
+        if (isHorizontalSwipe) {
+            // Horizontal swipe always rotates the Y-axis middle slice (horizontal slice)
+            return { axis: 'y', layer: 0 };
+        } else {
+            // Vertical swipe rotates different axes depending on which face is clicked
+            if (clickedAxis === 'y') {
+                // Top or bottom face - vertical swipe rotates Z-axis middle slice
+                return { axis: 'z', layer: 0 };
+            } else if (clickedAxis === 'x') {
+                // Left or right face - vertical swipe rotates Z-axis middle slice
+                return { axis: 'z', layer: 0 };
+            } else if (clickedAxis === 'z') {
+                // Front or back face - vertical swipe rotates X-axis middle slice
+                return { axis: 'x', layer: 0 };
+            }
+        }
+        
+        // Fallback to rotating the clicked face
+        return { axis: clickedAxis, layer: clickedLayer };
+    }
+
+    /**
      * Create a single cubie at position (x, y, z)
      */
     createCubie(x, y, z) {

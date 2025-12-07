@@ -80,6 +80,13 @@ function selectCornerNeighborBySwipeDirection(neighborFaces, deltaX, deltaY) {
     return rubiksCube.selectCornerNeighborBySwipeDirection(neighborFaces, deltaX, deltaY);
 }
 
+/**
+ * Selects which middle slice to rotate for a center cubie based on swipe direction.
+ */
+function selectCenterSliceBySwipeDirection(clickedAxis, clickedLayer, deltaX, deltaY) {
+    return rubiksCube.selectCenterSliceBySwipeDirection(clickedAxis, clickedLayer, deltaX, deltaY);
+}
+
 // Get cubies from the cube instance
 function getCubies() {
     return rubiksCube.getCubies();
@@ -553,13 +560,13 @@ container.addEventListener('mousedown', (e) => {
             modifierKeyState.swipeInitialPos = { x: e.clientX, y: e.clientY };
             highlightCubieForModifier(faceInfo.cubie, faceInfo.normal);
             
-            // For corner cubies, delay rotation start until swipe direction is known
-            if (faceInfo.cubieType === 'corner') {
+            // For corner and center cubies, delay rotation start until swipe direction is known
+            if (faceInfo.cubieType === 'corner' || faceInfo.cubieType === 'center') {
                 modifierKeyState.cornerRotationStarted = false;
                 // Don't start rotation yet - wait for first move
             } else {
-                // For center and edge cubies, start rotation immediately with clicked face
-                modifierKeyState.cornerRotationStarted = true; // Not a corner, mark as started
+                // For edge cubies, start rotation immediately with clicked face
+                modifierKeyState.cornerRotationStarted = true; // Not a corner/center, mark as started
                 startModifierFaceRotation(faceInfo.axis, faceInfo.layer);
             }
         }
@@ -605,9 +612,32 @@ container.addEventListener('mousemove', (e) => {
                 }
             }
             
+            // For center cubies, determine rotation axis from swipe direction on first move
+            if (faceInfo.cubieType === 'center' && !modifierKeyState.cornerRotationStarted) {
+                // Use total delta from initial position to determine direction
+                const totalDeltaX = e.clientX - modifierKeyState.swipeInitialPos.x;
+                const totalDeltaY = e.clientY - modifierKeyState.swipeInitialPos.y;
+                
+                // Select middle slice based on swipe direction
+                const selectedSlice = selectCenterSliceBySwipeDirection(
+                    faceInfo.axis,
+                    faceInfo.layer,
+                    totalDeltaX,
+                    totalDeltaY
+                );
+                
+                // Store selected slice in a separate property
+                modifierKeyState.selectedAxis = selectedSlice.axis;
+                modifierKeyState.selectedLayer = selectedSlice.layer;
+                
+                // Now start the rotation with the selected slice
+                startModifierFaceRotation(selectedSlice.axis, selectedSlice.layer);
+                modifierKeyState.cornerRotationStarted = true;
+            }
+            
             // Only rotate if rotation group has been created
             if (modifierKeyState.rotationGroup) {
-                // Use selected axis/layer for corners, original for others
+                // Use selected axis/layer for corners/centers, original for others
                 const rotationAxis = modifierKeyState.selectedAxis || faceInfo.axis;
                 const rotationLayer = modifierKeyState.selectedLayer || faceInfo.layer;
                 
@@ -1286,14 +1316,14 @@ container.addEventListener('touchstart', (e) => {
             // Highlight the touched cubie - pass the face normal to highlight only that face
             highlightCubie(faceInfo.cubie, faceInfo.normal);
             
-            // For corner cubies, delay rotation start until swipe direction is known
-            if (faceInfo.cubieType === 'corner') {
+            // For corner and center cubies, delay rotation start until swipe direction is known
+            if (faceInfo.cubieType === 'corner' || faceInfo.cubieType === 'center') {
                 touchState.cornerRotationStarted = false;
         touchState.selectedAxis = null;
         touchState.selectedLayer = null;
                 // Don't start rotation yet - wait for first move
             } else {
-                // For center and edge cubies, start rotation immediately with clicked face
+                // For edge cubies, start rotation immediately with clicked face
                 touchState.cornerRotationStarted = true;
                 startFaceRotation(faceInfo.axis, faceInfo.layer, 0);
             }
@@ -1361,9 +1391,32 @@ container.addEventListener('touchmove', (e) => {
                     }
                 }
                 
+                // For center cubies, determine rotation axis from swipe direction on first move
+                if (faceInfo.cubieType === 'center' && !touchState.cornerRotationStarted) {
+                    // Use total delta from initial position to determine direction
+                    const totalDeltaX = swipeTouch.clientX - touchState.swipeInitialPos.x;
+                    const totalDeltaY = swipeTouch.clientY - touchState.swipeInitialPos.y;
+                    
+                    // Select middle slice based on swipe direction
+                    const selectedSlice = selectCenterSliceBySwipeDirection(
+                        faceInfo.axis,
+                        faceInfo.layer,
+                        totalDeltaX,
+                        totalDeltaY
+                    );
+                    
+                    // Store selected slice in a separate property
+                    touchState.selectedAxis = selectedSlice.axis;
+                    touchState.selectedLayer = selectedSlice.layer;
+                    
+                    // Now start the rotation with the selected slice
+                    startFaceRotation(selectedSlice.axis, selectedSlice.layer, 0);
+                    touchState.cornerRotationStarted = true;
+                }
+                
                 // Only rotate if rotation group has been created
                 if (touchState.rotationGroup) {
-                    // Use selected axis/layer for corners, original for others
+                    // Use selected axis/layer for corners/centers, original for others
                     const rotationAxis = touchState.selectedAxis || faceInfo.axis;
                     const rotationLayer = touchState.selectedLayer || faceInfo.layer;
                     
