@@ -97,12 +97,16 @@ function selectCenterSliceBySwipeDirection(clickedAxis, clickedLayer, deltaX, de
  * based on the current cube rotation.
  */
 function getScreenRelativeFace(axis, layer) {
-    // Create a vector pointing in the direction of the clicked face
+    // Create a unit vector pointing in the direction of the clicked face
+    // The layer value (1 or -1) indicates the direction along the axis
     const faceVector = new THREE.Vector3(
-        axis === 'x' ? layer : 0,
-        axis === 'y' ? layer : 0,
-        axis === 'z' ? layer : 0
+        axis === 'x' ? 1 : 0,
+        axis === 'y' ? 1 : 0,
+        axis === 'z' ? 1 : 0
     );
+    
+    // Apply the layer sign to the vector
+    faceVector.multiplyScalar(layer);
     
     // Transform to world space using cube's current rotation
     const cubeQuaternion = new THREE.Quaternion();
@@ -114,7 +118,9 @@ function getScreenRelativeFace(axis, layer) {
     const absY = Math.abs(faceVector.y);
     const absZ = Math.abs(faceVector.z);
     
-    let screenAxis, screenLayer;
+    let screenAxis = 'z';
+    let screenLayer = 1;
+    
     if (absX >= absY && absX >= absZ) {
         screenAxis = 'x';
         screenLayer = faceVector.x > 0 ? 1 : -1;
