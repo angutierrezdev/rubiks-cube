@@ -52,13 +52,18 @@ function getColorHexString(colorNum) {
 }
 
 // Helper function to get face color from cubie and face normal
+// Uses materialIndex from raycasting for accurate color detection after cube rotations
+// @param cubie - The cubie mesh object
+// @param axis - The axis of the face (x, y, z) - used as fallback
+// @param layer - The layer of the face (1 or -1) - used as fallback
+// @param materialIndex - (Optional) The material index from raycasting, takes precedence when available
 function getFaceColor(cubie, axis, layer, materialIndex) {
     if (!cubie || !cubie.material) return null;
     
     const materials = Array.isArray(cubie.material) ? cubie.material : [cubie.material];
     
-    // Use the materialIndex from raycasting if available
-    if (materialIndex !== undefined && materialIndex < materials.length) {
+    // Use the materialIndex from raycasting if available and valid
+    if (materialIndex !== undefined && materialIndex >= 0 && materialIndex < materials.length) {
         const color = materials[materialIndex].color;
         return {
             hex: color.getHex(),
