@@ -147,6 +147,57 @@ button:disabled {
 #ai-test-banner a:hover {
     color: #0984e3;
 }
+
+/* Debug panel */
+#debug-panel {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    color: white;
+    font-size: 13px;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 15px;
+    border-radius: 8px;
+    min-width: 220px;
+    z-index: 100;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+#debug-panel h3 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    color: #74b9ff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 8px;
+}
+.debug-item {
+    display: flex;
+    align-items: center;
+    margin: 8px 0;
+    gap: 8px;
+}
+.debug-label {
+    font-weight: bold;
+    min-width: 80px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 12px;
+}
+#debug-face, #debug-color-name, #debug-coords, #debug-direction {
+    color: white;
+    font-family: monospace;
+    font-size: 13px;
+}
+#debug-color-indicator {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background-color: transparent;
+}
+#debug-direction {
+    font-weight: bold;
+    color: #4ecdc4;
+}
+
 @media (max-width: 600px) {
     #ai-test-banner {
         font-size: 12px;
@@ -154,6 +205,9 @@ button:disabled {
         padding: 8px 12px;
     }
     #instructions {
+        display: none;
+    }
+    #debug-panel {
         display: none;
     }
 }

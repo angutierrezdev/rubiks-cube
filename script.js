@@ -23,6 +23,129 @@ const uiController = new UIController({
     frontFaceNameEl: document.getElementById('front-face-name')
 });
 
+// Debug panel elements
+const debugPanel = {
+    face: document.getElementById('debug-face'),
+    colorIndicator: document.getElementById('debug-color-indicator'),
+    colorName: document.getElementById('debug-color-name'),
+    coords: document.getElementById('debug-coords'),
+    direction: document.getElementById('debug-direction')
+};
+
+// Helper function to get color name from hex value
+function getColorNameFromHex(hexColor) {
+    const colorMap = {
+        0xffffff: 'White',
+        0xffff00: 'Yellow',
+        0xff0000: 'Red',
+        0xff8c00: 'Orange',
+        0x0000ff: 'Blue',
+        0x00ff00: 'Green',
+        0x111111: 'Black'
+    };
+    return colorMap[hexColor] || 'Unknown';
+}
+
+// Helper function to get color hex string from number
+function getColorHexString(colorNum) {
+    return '#' + colorNum.toString(16).padStart(6, '0');
+}
+
+// Helper function to get face color from cubie and face normal
+function getFaceColor(cubie, axis, layer) {
+    if (!cubie || !cubie.material) return null;
+    
+    const materials = Array.isArray(cubie.material) ? cubie.material : [cubie.material];
+    
+    // Map axis/layer to material index
+    // Materials order: [right(x+), left(x-), top(y+), bottom(y-), front(z+), back(z-)]
+    let materialIndex = 0;
+    if (axis === 'x') {
+        materialIndex = layer > 0 ? 0 : 1;
+    } else if (axis === 'y') {
+        materialIndex = layer > 0 ? 2 : 3;
+    } else if (axis === 'z') {
+        materialIndex = layer > 0 ? 4 : 5;
+    }
+    
+    if (materialIndex < materials.length) {
+        const color = materials[materialIndex].color;
+        return {
+            hex: color.getHex(),
+            name: getColorNameFromHex(color.getHex())
+        };
+    }
+    
+    return null;
+}
+
+// Helper function to get face name from axis/layer
+function getFaceName(axis, layer) {
+    if (axis === 'x') return layer > 0 ? 'Right (X+)' : 'Left (X-)';
+    if (axis === 'y') return layer > 0 ? 'Top (Y+)' : 'Bottom (Y-)';
+    if (axis === 'z') return layer > 0 ? 'Front (Z+)' : 'Back (Z-)';
+    return 'Unknown';
+}
+
+// Helper function to get direction text and arrow
+function getDirectionText(deltaX, deltaY) {
+    if (deltaX === 0 && deltaY === 0) return '-';
+    
+    const absX = Math.abs(deltaX);
+    const absY = Math.abs(deltaY);
+    const threshold = 5; // Minimum movement to register
+    
+    if (absX < threshold && absY < threshold) return '-';
+    
+    let direction = '';
+    
+    // Determine vertical component
+    if (absY > threshold) {
+        direction += deltaY < 0 ? '↑ Up' : '↓ Down';
+    }
+    
+    // Determine horizontal component
+    if (absX > threshold) {
+        if (direction) direction += ' + ';
+        direction += deltaX > 0 ? '→ Right' : '← Left';
+    }
+    
+    return direction;
+}
+
+// Update debug panel with current interaction info
+function updateDebugPanel(faceInfo, deltaX = 0, deltaY = 0) {
+    if (!faceInfo) {
+        // Reset debug panel
+        debugPanel.face.textContent = '-';
+        debugPanel.colorIndicator.style.backgroundColor = 'transparent';
+        debugPanel.colorName.textContent = '-';
+        debugPanel.coords.textContent = '-';
+        debugPanel.direction.textContent = '-';
+        return;
+    }
+    
+    // Update face
+    debugPanel.face.textContent = getFaceName(faceInfo.axis, faceInfo.layer);
+    
+    // Update color
+    const faceColor = getFaceColor(faceInfo.cubie, faceInfo.axis, faceInfo.layer);
+    if (faceColor) {
+        debugPanel.colorIndicator.style.backgroundColor = getColorHexString(faceColor.hex);
+        debugPanel.colorName.textContent = faceColor.name;
+    } else {
+        debugPanel.colorIndicator.style.backgroundColor = 'transparent';
+        debugPanel.colorName.textContent = 'Unknown';
+    }
+    
+    // Update coordinates
+    const pos = faceInfo.cubiePos;
+    debugPanel.coords.textContent = `(${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})`;
+    
+    // Update direction
+    debugPanel.direction.textContent = getDirectionText(deltaX, deltaY);
+}
+
 // Scene setup
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -623,6 +746,9 @@ container.addEventListener('mousedown', (e) => {
             modifierKeyState.swipeInitialPos = { x: e.clientX, y: e.clientY };
             highlightCubieForModifier(faceInfo.cubie, faceInfo.normal);
             
+            // Update debug panel with initial face info
+            updateDebugPanel(faceInfo, 0, 0);
+            
             // For corner and center cubies, delay rotation start until swipe direction is known
             if (faceInfo.cubieType === 'corner' || faceInfo.cubieType === 'center') {
                 modifierKeyState.cornerRotationStarted = false;
@@ -648,6 +774,11 @@ container.addEventListener('mousemove', (e) => {
         const deltaX = e.clientX - modifierKeyState.swipeStartPos.x;
         const deltaY = e.clientY - modifierKeyState.swipeStartPos.y;
         const screenLength = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        
+        // Update debug panel with drag direction
+        const totalDeltaX = e.clientX - modifierKeyState.swipeInitialPos.x;
+        const totalDeltaY = e.clientY - modifierKeyState.swipeInitialPos.y;
+        updateDebugPanel(faceInfo, totalDeltaX, totalDeltaY);
         
         if (screenLength > MIN_SWIPE_THRESHOLD) {
             // For corner cubies, determine rotation axis from swipe direction on first move
@@ -759,6 +890,9 @@ container.addEventListener('mouseup', () => {
         modifierKeyState.selectedLayer = null;
         modifierKeyState.cornerRotationStarted = false;
         removeModifierHighlight();
+        
+        // Reset debug panel
+        updateDebugPanel(null);
     }
     isDragging = false;
 });
@@ -776,6 +910,9 @@ container.addEventListener('mouseleave', () => {
         modifierKeyState.selectedAxis = null;
         modifierKeyState.selectedLayer = null;
         removeModifierHighlight();
+        
+        // Reset debug panel
+        updateDebugPanel(null);
     }
     isDragging = false;
 });
@@ -1386,6 +1523,9 @@ container.addEventListener('touchstart', (e) => {
             // Highlight the touched cubie - pass the face normal to highlight only that face
             highlightCubie(faceInfo.cubie, faceInfo.normal);
             
+            // Update debug panel with initial face info
+            updateDebugPanel(faceInfo, 0, 0);
+            
             // For corner and center cubies, delay rotation start until swipe direction is known
             if (faceInfo.cubieType === 'corner' || faceInfo.cubieType === 'center') {
                 touchState.cornerRotationStarted = false;
@@ -1434,6 +1574,11 @@ container.addEventListener('touchmove', (e) => {
             const deltaX = swipeTouch.clientX - touchState.swipeStartPos.x;
             const deltaY = swipeTouch.clientY - touchState.swipeStartPos.y;
             const screenLength = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            
+            // Update debug panel with drag direction
+            const totalDeltaX = swipeTouch.clientX - touchState.swipeInitialPos.x;
+            const totalDeltaY = swipeTouch.clientY - touchState.swipeInitialPos.y;
+            updateDebugPanel(faceInfo, totalDeltaX, totalDeltaY);
             
             if (screenLength > MIN_SWIPE_THRESHOLD) {
                 // For corner cubies, determine rotation axis from swipe direction on first move
@@ -1546,6 +1691,9 @@ container.addEventListener('touchend', (e) => {
         touchState.selectedAxis = null;
         touchState.selectedLayer = null;
         removeHighlight();
+        
+        // Reset debug panel
+        updateDebugPanel(null);
     } else if (e.touches.length === 1) {
         // One touch remains - check if it's the lock or swipe
         const remainingId = e.touches[0].identifier;
@@ -1564,6 +1712,9 @@ container.addEventListener('touchend', (e) => {
         touchState.selectedLayer = null;
             touchState.isLocked = false;
             removeHighlight();
+            
+            // Reset debug panel
+            updateDebugPanel(null);
         } else if (touchState.swipeTouch && remainingId === touchState.swipeTouch.id) {
             // Swipe touch remains, lock ended - switch roles
             touchState.lockTouch = touchState.swipeTouch;
@@ -1579,6 +1730,9 @@ container.addEventListener('touchend', (e) => {
             }
             touchState.isLocked = false;
             removeHighlight();
+            
+            // Reset debug panel
+            updateDebugPanel(null);
         }
     } else if (e.touches.length === 2) {
         // Still two touches - update which is which

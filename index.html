@@ -32,6 +32,26 @@
         <h4>Face Swipe (Desktop)</h4>
         <p>⌘/Ctrl + drag to swipe faces</p>
     </div>
+    <div id="debug-panel">
+        <h3>Debug Info</h3>
+        <div class="debug-item">
+            <span class="debug-label">Face:</span>
+            <span id="debug-face">-</span>
+        </div>
+        <div class="debug-item">
+            <span class="debug-label">Color:</span>
+            <div id="debug-color-indicator"></div>
+            <span id="debug-color-name">-</span>
+        </div>
+        <div class="debug-item">
+            <span class="debug-label">Coordinates:</span>
+            <span id="debug-coords">-</span>
+        </div>
+        <div class="debug-item">
+            <span class="debug-label">Drag Direction:</span>
+            <span id="debug-direction">-</span>
+        </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
     <script src="cubeRenderer.js"></script>
