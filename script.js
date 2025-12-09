@@ -34,6 +34,14 @@ const debugPanel = {
 
 // Helper function to get color name from hex value
 function getColorNameFromHex(hexColor) {
+    // Round color components to handle slight variations
+    // This is necessary because THREE.js colors may have slight differences from the original hex values
+    // due to floating point precision or rendering adjustments
+    const r = Math.round(((hexColor >> 16) & 0xff) / 16) * 16;
+    const g = Math.round(((hexColor >> 8) & 0xff) / 16) * 16;
+    const b = Math.round((hexColor & 0xff) / 16) * 16;
+    const roundedHex = (r << 16) | (g << 8) | b;
+    
     const colorMap = {
         0xffffff: 'White',
         0xffff00: 'Yellow',
@@ -41,14 +49,40 @@ function getColorNameFromHex(hexColor) {
         0xff8c00: 'Orange',
         0x0000ff: 'Blue',
         0x00ff00: 'Green',
-        0x111111: 'Black'
+        0x111111: 'Black',
+        0x000000: 'Black'  // Also match pure black
     };
     
-    // Debug logging to help diagnose color issues
-    console.log('getColorNameFromHex called with:', hexColor, 'type:', typeof hexColor);
-    console.log('Color map lookup result:', colorMap[hexColor]);
+    // Try exact match first
+    if (colorMap[hexColor]) {
+        console.log('Exact match found for', hexColor.toString(16), ':', colorMap[hexColor]);
+        return colorMap[hexColor];
+    }
     
-    return colorMap[hexColor] || 'Unknown';
+    // Try rounded match
+    if (colorMap[roundedHex]) {
+        console.log('Rounded match found. Original:', hexColor.toString(16), 'Rounded:', roundedHex.toString(16), ':', colorMap[roundedHex]);
+        return colorMap[roundedHex];
+    }
+    
+    // If still no match, try to identify by dominant color component
+    const red = (hexColor >> 16) & 0xff;
+    const green = (hexColor >> 8) & 0xff;
+    const blue = hexColor & 0xff;
+    
+    console.log('No direct match. RGB components:', {red, green, blue});
+    
+    // Identify by dominant color
+    if (red > 200 && green > 200 && blue > 200) return 'White';
+    if (red > 200 && green > 200 && blue < 50) return 'Yellow';
+    if (red > 200 && green < 100 && blue < 100) return 'Red';
+    if (red > 200 && green > 100 && blue < 100) return 'Orange';
+    if (red < 100 && green < 100 && blue > 200) return 'Blue';
+    if (red < 100 && green > 200 && blue < 100) return 'Green';
+    if (red < 50 && green < 50 && blue < 50) return 'Black';
+    
+    console.log('Color not identified, returning Unknown');
+    return 'Unknown';
 }
 
 // Helper function to get color hex string from number
