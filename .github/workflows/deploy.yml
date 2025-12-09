@@ -33,8 +33,16 @@ jobs:
       - name: Create dist directory
         run: mkdir -p dist
 
-      - name: Minify JavaScript
-        run: uglifyjs script.js -o dist/script.js --compress --mangle
+      - name: Minify JavaScript files
+        run: |
+          uglifyjs cube.js -o dist/cube.js --compress --mangle
+          uglifyjs cubeRenderer.js -o dist/cubeRenderer.js --compress --mangle
+          uglifyjs rotationStrategy.js -o dist/rotationStrategy.js --compress --mangle
+          uglifyjs uiController.js -o dist/uiController.js --compress --mangle
+          uglifyjs cameraController.js -o dist/cameraController.js --compress --mangle
+          uglifyjs highlightManager.js -o dist/highlightManager.js --compress --mangle
+          uglifyjs touchHandler.js -o dist/touchHandler.js --compress --mangle
+          uglifyjs script.js -o dist/script.js --compress --mangle
 
       - name: Minify CSS
         run: cleancss -o dist/styles.css styles.css
