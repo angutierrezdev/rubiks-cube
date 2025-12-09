@@ -43,6 +43,11 @@ function getColorNameFromHex(hexColor) {
         0x00ff00: 'Green',
         0x111111: 'Black'
     };
+    
+    // Debug logging to help diagnose color issues
+    console.log('getColorNameFromHex called with:', hexColor, 'type:', typeof hexColor);
+    console.log('Color map lookup result:', colorMap[hexColor]);
+    
     return colorMap[hexColor] || 'Unknown';
 }
 
@@ -62,12 +67,17 @@ function getFaceColor(cubie, axis, layer, materialIndex) {
     
     const materials = Array.isArray(cubie.material) ? cubie.material : [cubie.material];
     
+    console.log('getFaceColor called with materialIndex:', materialIndex, 'axis:', axis, 'layer:', layer);
+    console.log('Materials array length:', materials.length);
+    
     // Use the materialIndex from raycasting if available and valid
     if (materialIndex !== undefined && materialIndex >= 0 && materialIndex < materials.length) {
         const color = materials[materialIndex].color;
+        const hexValue = color.getHex();
+        console.log('Using materialIndex', materialIndex, 'color hex:', hexValue, 'color object:', color);
         return {
-            hex: color.getHex(),
-            name: getColorNameFromHex(color.getHex())
+            hex: hexValue,
+            name: getColorNameFromHex(hexValue)
         };
     }
     
@@ -82,11 +92,15 @@ function getFaceColor(cubie, axis, layer, materialIndex) {
         fallbackIndex = layer > 0 ? 4 : 5;
     }
     
+    console.log('Using fallback index:', fallbackIndex);
+    
     if (fallbackIndex < materials.length) {
         const color = materials[fallbackIndex].color;
+        const hexValue = color.getHex();
+        console.log('Fallback color hex:', hexValue, 'color object:', color);
         return {
-            hex: color.getHex(),
-            name: getColorNameFromHex(color.getHex())
+            hex: hexValue,
+            name: getColorNameFromHex(hexValue)
         };
     }
     
