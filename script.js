@@ -933,8 +933,20 @@ container.addEventListener('mousemove', (e) => {
     const deltaX = e.clientX - previousMousePosition.x;
     const deltaY = e.clientY - previousMousePosition.y;
     
-    cubeGroup.rotation.y += deltaX * 0.01;
-    cubeGroup.rotation.x += deltaY * 0.01;
+    // Use quaternion-based rotation for consistent rotation direction
+    const rotationSpeed = 0.01;
+    const deltaRotationQuaternion = new THREE.Quaternion()
+        .setFromEuler(new THREE.Euler(
+            deltaY * rotationSpeed,
+            deltaX * rotationSpeed,
+            0,
+            'XYZ'
+        ));
+    
+    cubeGroup.quaternion.multiplyQuaternions(
+        deltaRotationQuaternion,
+        cubeGroup.quaternion
+    );
     
     previousMousePosition = { x: e.clientX, y: e.clientY };
 });
@@ -1614,8 +1626,20 @@ container.addEventListener('touchmove', (e) => {
             const deltaX = e.touches[0].clientX - previousMousePosition.x;
             const deltaY = e.touches[0].clientY - previousMousePosition.y;
             
-            cubeGroup.rotation.y += deltaX * 0.01;
-            cubeGroup.rotation.x += deltaY * 0.01;
+            // Use quaternion-based rotation for consistent rotation direction
+            const rotationSpeed = 0.01;
+            const deltaRotationQuaternion = new THREE.Quaternion()
+                .setFromEuler(new THREE.Euler(
+                    deltaY * rotationSpeed,
+                    deltaX * rotationSpeed,
+                    0,
+                    'XYZ'
+                ));
+            
+            cubeGroup.quaternion.multiplyQuaternions(
+                deltaRotationQuaternion,
+                cubeGroup.quaternion
+            );
             
             previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
             updateFrontFaceIndicator();
