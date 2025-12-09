@@ -250,6 +250,11 @@ const CENTER_CUBIE_THRESHOLD = 0.01;
 const TANGENT_ALIGNMENT_THRESHOLD = 0.1;
 const TOUCH_ROTATION_SCALE = 2.0;
 const MIN_SWIPE_THRESHOLD = 1;
+const CUBE_ROTATION_SPEED = 0.01;
+
+// Reusable objects for cube rotation to avoid creating new objects on every move
+const tempQuaternion = new THREE.Quaternion();
+const tempEuler = new THREE.Euler();
 
 /**
  * Gets cubie type and neighbor faces for special corner rotation behavior.
@@ -934,17 +939,16 @@ container.addEventListener('mousemove', (e) => {
     const deltaY = e.clientY - previousMousePosition.y;
     
     // Use quaternion-based rotation for consistent rotation direction
-    const rotationSpeed = 0.01;
-    const deltaRotationQuaternion = new THREE.Quaternion()
-        .setFromEuler(new THREE.Euler(
-            deltaY * rotationSpeed,
-            deltaX * rotationSpeed,
-            0,
-            'XYZ'
-        ));
+    tempEuler.set(
+        deltaY * CUBE_ROTATION_SPEED,
+        deltaX * CUBE_ROTATION_SPEED,
+        0,
+        'XYZ'
+    );
+    tempQuaternion.setFromEuler(tempEuler);
     
     cubeGroup.quaternion.multiplyQuaternions(
-        deltaRotationQuaternion,
+        tempQuaternion,
         cubeGroup.quaternion
     );
     
@@ -1627,17 +1631,16 @@ container.addEventListener('touchmove', (e) => {
             const deltaY = e.touches[0].clientY - previousMousePosition.y;
             
             // Use quaternion-based rotation for consistent rotation direction
-            const rotationSpeed = 0.01;
-            const deltaRotationQuaternion = new THREE.Quaternion()
-                .setFromEuler(new THREE.Euler(
-                    deltaY * rotationSpeed,
-                    deltaX * rotationSpeed,
-                    0,
-                    'XYZ'
-                ));
+            tempEuler.set(
+                deltaY * CUBE_ROTATION_SPEED,
+                deltaX * CUBE_ROTATION_SPEED,
+                0,
+                'XYZ'
+            );
+            tempQuaternion.setFromEuler(tempEuler);
             
             cubeGroup.quaternion.multiplyQuaternions(
-                deltaRotationQuaternion,
+                tempQuaternion,
                 cubeGroup.quaternion
             );
             
