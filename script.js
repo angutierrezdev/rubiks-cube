@@ -23,6 +23,191 @@ const uiController = new UIController({
     frontFaceNameEl: document.getElementById('front-face-name')
 });
 
+// Debug panel elements
+const debugPanel = {
+    face: document.getElementById('debug-face'),
+    colorIndicator: document.getElementById('debug-color-indicator'),
+    colorName: document.getElementById('debug-color-name'),
+    coords: document.getElementById('debug-coords'),
+    direction: document.getElementById('debug-direction')
+};
+
+// Helper function to get color name from hex value
+function getColorNameFromHex(hexColor) {
+    // Round color components to handle slight variations
+    // This is necessary because THREE.js colors may have slight differences from the original hex values
+    // due to floating point precision or rendering adjustments
+    const r = Math.round(((hexColor >> 16) & 0xff) / 16) * 16;
+    const g = Math.round(((hexColor >> 8) & 0xff) / 16) * 16;
+    const b = Math.round((hexColor & 0xff) / 16) * 16;
+    const roundedHex = (r << 16) | (g << 8) | b;
+    
+    const colorMap = {
+        0xffffff: 'White',
+        0xffff00: 'Yellow',
+        0xff0000: 'Red',
+        0xff8c00: 'Orange',
+        0x0000ff: 'Blue',
+        0x00ff00: 'Green',
+        0x111111: 'Black',
+        0x000000: 'Black'  // Also match pure black
+    };
+    
+    // Try exact match first
+    if (colorMap[hexColor]) {
+        console.log('Exact match found for', hexColor.toString(16), ':', colorMap[hexColor]);
+        return colorMap[hexColor];
+    }
+    
+    // Try rounded match
+    if (colorMap[roundedHex]) {
+        console.log('Rounded match found. Original:', hexColor.toString(16), 'Rounded:', roundedHex.toString(16), ':', colorMap[roundedHex]);
+        return colorMap[roundedHex];
+    }
+    
+    // If still no match, try to identify by dominant color component
+    const red = (hexColor >> 16) & 0xff;
+    const green = (hexColor >> 8) & 0xff;
+    const blue = hexColor & 0xff;
+    
+    console.log('No direct match. RGB components:', {red, green, blue});
+    
+    // Identify by dominant color
+    if (red > 200 && green > 200 && blue > 200) return 'White';
+    if (red > 200 && green > 200 && blue < 50) return 'Yellow';
+    if (red > 200 && green < 100 && blue < 100) return 'Red';
+    if (red > 200 && green > 100 && blue < 100) return 'Orange';
+    if (red < 100 && green < 100 && blue > 200) return 'Blue';
+    if (red < 100 && green > 200 && blue < 100) return 'Green';
+    if (red < 50 && green < 50 && blue < 50) return 'Black';
+    
+    console.log('Color not identified, returning Unknown');
+    return 'Unknown';
+}
+
+// Helper function to get color hex string from number
+function getColorHexString(colorNum) {
+    return '#' + colorNum.toString(16).padStart(6, '0');
+}
+
+// Helper function to get face color from cubie and face normal
+// Uses materialIndex from raycasting for accurate color detection after cube rotations
+// @param cubie - The cubie mesh object
+// @param axis - The axis of the face (x, y, z) - used as fallback
+// @param layer - The layer of the face (1 or -1) - used as fallback
+// @param materialIndex - (Optional) The material index from raycasting, takes precedence when available
+function getFaceColor(cubie, axis, layer, materialIndex) {
+    if (!cubie || !cubie.material) return null;
+    
+    const materials = Array.isArray(cubie.material) ? cubie.material : [cubie.material];
+    
+    console.log('getFaceColor called with materialIndex:', materialIndex, 'axis:', axis, 'layer:', layer);
+    console.log('Materials array length:', materials.length);
+    
+    // Use the materialIndex from raycasting if available and valid
+    if (materialIndex !== undefined && materialIndex >= 0 && materialIndex < materials.length) {
+        const color = materials[materialIndex].color;
+        const hexValue = color.getHex();
+        console.log('Using materialIndex', materialIndex, 'color hex:', hexValue, 'color object:', color);
+        return {
+            hex: hexValue,
+            name: getColorNameFromHex(hexValue)
+        };
+    }
+    
+    // Fallback: Map axis/layer to material index
+    // Materials order: [right(x+), left(x-), top(y+), bottom(y-), front(z+), back(z-)]
+    let fallbackIndex = 0;
+    if (axis === 'x') {
+        fallbackIndex = layer > 0 ? 0 : 1;
+    } else if (axis === 'y') {
+        fallbackIndex = layer > 0 ? 2 : 3;
+    } else if (axis === 'z') {
+        fallbackIndex = layer > 0 ? 4 : 5;
+    }
+    
+    console.log('Using fallback index:', fallbackIndex);
+    
+    if (fallbackIndex < materials.length) {
+        const color = materials[fallbackIndex].color;
+        const hexValue = color.getHex();
+        console.log('Fallback color hex:', hexValue, 'color object:', color);
+        return {
+            hex: hexValue,
+            name: getColorNameFromHex(hexValue)
+        };
+    }
+    
+    return null;
+}
+
+// Helper function to get face name from axis/layer
+function getFaceName(axis, layer) {
+    if (axis === 'x') return layer > 0 ? 'Right (X+)' : 'Left (X-)';
+    if (axis === 'y') return layer > 0 ? 'Top (Y+)' : 'Bottom (Y-)';
+    if (axis === 'z') return layer > 0 ? 'Front (Z+)' : 'Back (Z-)';
+    return 'Unknown';
+}
+
+// Helper function to get direction text and arrow
+function getDirectionText(deltaX, deltaY) {
+    if (deltaX === 0 && deltaY === 0) return '-';
+    
+    const absX = Math.abs(deltaX);
+    const absY = Math.abs(deltaY);
+    const threshold = 5; // Minimum movement to register
+    
+    if (absX < threshold && absY < threshold) return '-';
+    
+    let direction = '';
+    
+    // Determine vertical component
+    if (absY > threshold) {
+        direction += deltaY < 0 ? '↑ Up' : '↓ Down';
+    }
+    
+    // Determine horizontal component
+    if (absX > threshold) {
+        if (direction) direction += ' + ';
+        direction += deltaX > 0 ? '→ Right' : '← Left';
+    }
+    
+    return direction;
+}
+
+// Update debug panel with current interaction info
+function updateDebugPanel(faceInfo, deltaX = 0, deltaY = 0) {
+    if (!faceInfo) {
+        // Reset debug panel
+        debugPanel.face.textContent = '-';
+        debugPanel.colorIndicator.style.backgroundColor = 'transparent';
+        debugPanel.colorName.textContent = '-';
+        debugPanel.coords.textContent = '-';
+        debugPanel.direction.textContent = '-';
+        return;
+    }
+    
+    // Update face
+    debugPanel.face.textContent = getFaceName(faceInfo.axis, faceInfo.layer);
+    
+    // Update color
+    const faceColor = getFaceColor(faceInfo.cubie, faceInfo.axis, faceInfo.layer, faceInfo.materialIndex);
+    if (faceColor) {
+        debugPanel.colorIndicator.style.backgroundColor = getColorHexString(faceColor.hex);
+        debugPanel.colorName.textContent = faceColor.name;
+    } else {
+        debugPanel.colorIndicator.style.backgroundColor = 'transparent';
+        debugPanel.colorName.textContent = 'Unknown';
+    }
+    
+    // Update coordinates
+    const pos = faceInfo.cubiePos;
+    debugPanel.coords.textContent = `(${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})`;
+    
+    // Update direction
+    debugPanel.direction.textContent = getDirectionText(deltaX, deltaY);
+}
+
 // Scene setup
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -82,9 +267,60 @@ function selectCornerNeighborBySwipeDirection(neighborFaces, deltaX, deltaY) {
 
 /**
  * Selects which middle slice to rotate for a center cubie based on swipe direction.
+ * This function transforms the clicked face to screen-relative coordinates before
+ * determining the middle slice to rotate.
  */
 function selectCenterSliceBySwipeDirection(clickedAxis, clickedLayer, deltaX, deltaY) {
-    return rubiksCube.selectCenterSliceBySwipeDirection(clickedAxis, clickedLayer, deltaX, deltaY);
+    // Transform the clicked face axis/layer to screen-relative orientation
+    // to correctly map screen swipes to cube rotations.
+    // Note: The underlying function uses only the axis to determine which middle slice (layer 0)
+    // to rotate, so the transformed layer value is not critical for the main logic paths.
+    const screenRelativeFace = getScreenRelativeFace(clickedAxis, clickedLayer);
+    return rubiksCube.selectCenterSliceBySwipeDirection(screenRelativeFace.axis, screenRelativeFace.layer, deltaX, deltaY);
+}
+
+/**
+ * Transforms a cube-local face (axis, layer) to screen-relative coordinates
+ * based on the current cube rotation.
+ */
+function getScreenRelativeFace(axis, layer) {
+    // Create a unit vector pointing in the direction of the clicked face
+    // The layer value (1 or -1) indicates the direction along the axis
+    const faceVector = new THREE.Vector3(
+        axis === 'x' ? 1 : 0,
+        axis === 'y' ? 1 : 0,
+        axis === 'z' ? 1 : 0
+    );
+    
+    // Apply the layer sign to the vector
+    faceVector.multiplyScalar(layer);
+    
+    // Transform to world space using cube's current rotation
+    const cubeQuaternion = new THREE.Quaternion();
+    cubeGroup.getWorldQuaternion(cubeQuaternion);
+    faceVector.applyQuaternion(cubeQuaternion);
+    
+    // Determine which axis is dominant in screen space
+    const absX = Math.abs(faceVector.x);
+    const absY = Math.abs(faceVector.y);
+    const absZ = Math.abs(faceVector.z);
+    
+    // Default to z-axis (front/back) - this should always be overridden by one of the conditions below
+    let screenAxis = 'z';
+    let screenLayer = 1;
+    
+    if (absX >= absY && absX >= absZ) {
+        screenAxis = 'x';
+        screenLayer = faceVector.x > 0 ? 1 : -1;
+    } else if (absY >= absZ) {
+        screenAxis = 'y';
+        screenLayer = faceVector.y > 0 ? 1 : -1;
+    } else {
+        screenAxis = 'z';
+        screenLayer = faceVector.z > 0 ? 1 : -1;
+    }
+    
+    return { axis: screenAxis, layer: screenLayer };
 }
 
 // Get cubies from the cube instance
@@ -245,7 +481,8 @@ function getFaceFromMouse(mouseEvent) {
                 worldNormal: worldNormal, 
                 cubiePos: cubiePos,
                 cubieType,
-                neighborFaces
+                neighborFaces,
+                materialIndex: intersect.face.materialIndex // Add material index from raycasting
             };
         }
     }
@@ -403,6 +640,9 @@ function finalizeModifierFaceRotation(finalAngle) {
     modifierKeyState.swipeAxis = null;
     modifierKeyState.swipeLayer = null;
     modifierKeyState.currentRotation = 0;
+    
+    // Update front face indicator after rotation completes
+    updateFrontFaceIndicator();
 }
 
 // Highlight a cubie for modifier key mode
@@ -569,6 +809,9 @@ container.addEventListener('mousedown', (e) => {
             modifierKeyState.swipeInitialPos = { x: e.clientX, y: e.clientY };
             highlightCubieForModifier(faceInfo.cubie, faceInfo.normal);
             
+            // Update debug panel with initial face info
+            updateDebugPanel(faceInfo, 0, 0);
+            
             // For corner and center cubies, delay rotation start until swipe direction is known
             if (faceInfo.cubieType === 'corner' || faceInfo.cubieType === 'center') {
                 modifierKeyState.cornerRotationStarted = false;
@@ -594,6 +837,11 @@ container.addEventListener('mousemove', (e) => {
         const deltaX = e.clientX - modifierKeyState.swipeStartPos.x;
         const deltaY = e.clientY - modifierKeyState.swipeStartPos.y;
         const screenLength = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        
+        // Update debug panel with drag direction
+        const totalDeltaX = e.clientX - modifierKeyState.swipeInitialPos.x;
+        const totalDeltaY = e.clientY - modifierKeyState.swipeInitialPos.y;
+        updateDebugPanel(faceInfo, totalDeltaX, totalDeltaY);
         
         if (screenLength > MIN_SWIPE_THRESHOLD) {
             // For corner cubies, determine rotation axis from swipe direction on first move
@@ -705,6 +953,9 @@ container.addEventListener('mouseup', () => {
         modifierKeyState.selectedLayer = null;
         modifierKeyState.cornerRotationStarted = false;
         removeModifierHighlight();
+        
+        // Reset debug panel
+        updateDebugPanel(null);
     }
     isDragging = false;
 });
@@ -722,6 +973,9 @@ container.addEventListener('mouseleave', () => {
         modifierKeyState.selectedAxis = null;
         modifierKeyState.selectedLayer = null;
         removeModifierHighlight();
+        
+        // Reset debug panel
+        updateDebugPanel(null);
     }
     isDragging = false;
 });
@@ -916,7 +1170,8 @@ function getFaceFromTouch(touch) {
                 worldNormal: worldNormal, 
                 cubiePos: cubiePos,
                 cubieType,
-                neighborFaces
+                neighborFaces,
+                materialIndex: intersect.face.materialIndex // Add material index from raycasting
             };
         }
     }
@@ -1101,6 +1356,9 @@ function finalizeFaceRotation(finalAngle) {
     touchState.swipeAxis = null;
     touchState.swipeLayer = null;
     touchState.currentRotation = 0;
+    
+    // Update front face indicator after rotation completes
+    updateFrontFaceIndicator();
 }
 
 // Calculate swipe direction relative to face
@@ -1329,6 +1587,9 @@ container.addEventListener('touchstart', (e) => {
             // Highlight the touched cubie - pass the face normal to highlight only that face
             highlightCubie(faceInfo.cubie, faceInfo.normal);
             
+            // Update debug panel with initial face info
+            updateDebugPanel(faceInfo, 0, 0);
+            
             // For corner and center cubies, delay rotation start until swipe direction is known
             if (faceInfo.cubieType === 'corner' || faceInfo.cubieType === 'center') {
                 touchState.cornerRotationStarted = false;
@@ -1377,6 +1638,11 @@ container.addEventListener('touchmove', (e) => {
             const deltaX = swipeTouch.clientX - touchState.swipeStartPos.x;
             const deltaY = swipeTouch.clientY - touchState.swipeStartPos.y;
             const screenLength = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            
+            // Update debug panel with drag direction
+            const totalDeltaX = swipeTouch.clientX - touchState.swipeInitialPos.x;
+            const totalDeltaY = swipeTouch.clientY - touchState.swipeInitialPos.y;
+            updateDebugPanel(faceInfo, totalDeltaX, totalDeltaY);
             
             if (screenLength > MIN_SWIPE_THRESHOLD) {
                 // For corner cubies, determine rotation axis from swipe direction on first move
@@ -1489,6 +1755,9 @@ container.addEventListener('touchend', (e) => {
         touchState.selectedAxis = null;
         touchState.selectedLayer = null;
         removeHighlight();
+        
+        // Reset debug panel
+        updateDebugPanel(null);
     } else if (e.touches.length === 1) {
         // One touch remains - check if it's the lock or swipe
         const remainingId = e.touches[0].identifier;
@@ -1507,6 +1776,9 @@ container.addEventListener('touchend', (e) => {
         touchState.selectedLayer = null;
             touchState.isLocked = false;
             removeHighlight();
+            
+            // Reset debug panel
+            updateDebugPanel(null);
         } else if (touchState.swipeTouch && remainingId === touchState.swipeTouch.id) {
             // Swipe touch remains, lock ended - switch roles
             touchState.lockTouch = touchState.swipeTouch;
@@ -1522,6 +1794,9 @@ container.addEventListener('touchend', (e) => {
             }
             touchState.isLocked = false;
             removeHighlight();
+            
+            // Reset debug panel
+            updateDebugPanel(null);
         }
     } else if (e.touches.length === 2) {
         // Still two touches - update which is which
