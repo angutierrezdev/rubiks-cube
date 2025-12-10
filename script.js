@@ -273,7 +273,7 @@ function selectCornerNeighborBySwipeDirection(neighborFaces, deltaX, deltaY) {
 /**
  * Selects which middle slice to rotate for a center cubie based on swipe direction.
  * This function transforms the clicked face to screen-relative coordinates before
- * determining the middle slice to rotate.
+ * determining the middle slice to rotate, then transforms the result back to cube-local coordinates.
  */
 function selectCenterSliceBySwipeDirection(clickedAxis, clickedLayer, deltaX, deltaY) {
     // Transform the clicked face axis/layer to screen-relative orientation
@@ -281,7 +281,11 @@ function selectCenterSliceBySwipeDirection(clickedAxis, clickedLayer, deltaX, de
     // Note: The underlying function uses only the axis to determine which middle slice (layer 0)
     // to rotate, so the transformed layer value is not critical for the main logic paths.
     const screenRelativeFace = getScreenRelativeFace(clickedAxis, clickedLayer);
-    return rubiksCube.selectCenterSliceBySwipeDirection(screenRelativeFace.axis, screenRelativeFace.layer, deltaX, deltaY);
+    const screenRelativeSlice = rubiksCube.selectCenterSliceBySwipeDirection(screenRelativeFace.axis, screenRelativeFace.layer, deltaX, deltaY);
+    
+    // Transform the result back from screen coordinates to cube-local coordinates
+    const cubeLocalSlice = getCubeLocalAxis(screenRelativeSlice.axis, screenRelativeSlice.layer);
+    return cubeLocalSlice;
 }
 
 /**
@@ -326,6 +330,46 @@ function getScreenRelativeFace(axis, layer) {
     }
     
     return { axis: screenAxis, layer: screenLayer };
+}
+
+/**
+ * Transforms a screen-relative axis back to cube-local coordinates
+ * This is the inverse of getScreenRelativeFace transformation.
+ */
+function getCubeLocalAxis(screenAxis, screenLayer) {
+    // Create a unit vector in screen space
+    const screenVector = new THREE.Vector3(
+        screenAxis === 'x' ? 1 : 0,
+        screenAxis === 'y' ? 1 : 0,
+        screenAxis === 'z' ? 1 : 0
+    );
+    
+    // Apply the layer sign
+    screenVector.multiplyScalar(screenLayer);
+    
+    // Get the inverse of the cube's rotation to transform back to cube-local space
+    const cubeQuaternion = new THREE.Quaternion();
+    cubeGroup.getWorldQuaternion(cubeQuaternion);
+    const inverseQuaternion = cubeQuaternion.clone().invert();
+    screenVector.applyQuaternion(inverseQuaternion);
+    
+    // Determine which axis is dominant in cube-local space
+    const absX = Math.abs(screenVector.x);
+    const absY = Math.abs(screenVector.y);
+    const absZ = Math.abs(screenVector.z);
+    
+    let cubeAxis = 'z';
+    let cubeLayer = 0; // Middle slices are always layer 0
+    
+    if (absX >= absY && absX >= absZ) {
+        cubeAxis = 'x';
+    } else if (absY >= absZ) {
+        cubeAxis = 'y';
+    } else {
+        cubeAxis = 'z';
+    }
+    
+    return { axis: cubeAxis, layer: cubeLayer };
 }
 
 // Get cubies from the cube instance
