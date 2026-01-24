@@ -35,17 +35,18 @@ jobs:
 
       - name: Minify JavaScript files
         run: |
-          uglifyjs cube.js -o dist/cube.js --compress --mangle
-          uglifyjs cubeRenderer.js -o dist/cubeRenderer.js --compress --mangle
-          uglifyjs rotationStrategy.js -o dist/rotationStrategy.js --compress --mangle
-          uglifyjs uiController.js -o dist/uiController.js --compress --mangle
-          uglifyjs cameraController.js -o dist/cameraController.js --compress --mangle
-          uglifyjs highlightManager.js -o dist/highlightManager.js --compress --mangle
-          uglifyjs touchHandler.js -o dist/touchHandler.js --compress --mangle
-          uglifyjs script.js -o dist/script.js --compress --mangle
+          mkdir -p dist/src/core dist/src/rendering dist/src/strategies dist/src/controllers
+          uglifyjs src/core/cube.js -o dist/src/core/cube.js --compress --mangle
+          uglifyjs src/rendering/cubeRenderer.js -o dist/src/rendering/cubeRenderer.js --compress --mangle
+          uglifyjs src/strategies/rotationStrategy.js -o dist/src/strategies/rotationStrategy.js --compress --mangle
+          uglifyjs src/controllers/uiController.js -o dist/src/controllers/uiController.js --compress --mangle
+          uglifyjs src/controllers/cameraController.js -o dist/src/controllers/cameraController.js --compress --mangle
+          uglifyjs src/rendering/highlightManager.js -o dist/src/rendering/highlightManager.js --compress --mangle
+          uglifyjs src/controllers/touchHandler.js -o dist/src/controllers/touchHandler.js --compress --mangle
+          uglifyjs src/app.js -o dist/src/app.js --compress --mangle
 
       - name: Minify CSS
-        run: cleancss -o dist/styles.css styles.css
+        run: cleancss -o dist/src/styles.css src/styles.css
 
       - name: Copy HTML and update references
         run: cp index.html dist/index.html
