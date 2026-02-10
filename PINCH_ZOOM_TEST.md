@@ -35,11 +35,11 @@ This implementation adds pinch-to-zoom functionality that only activates when **
 #### Test 1: Pinch Zoom on Empty Space
 1. Open the application on a touch-enabled device (phone, tablet, or touch screen)
 2. Place two fingers on empty space (NOT on the cube)
-3. Pinch fingers together → Cube should zoom out
-4. Spread fingers apart → Cube should zoom in
+3. Spread fingers apart (pinch out) → Cube should zoom in (appear larger)
+4. Bring fingers together (pinch in) → Cube should zoom out (appear smaller)
 5. Verify zoom stops at minimum/maximum limits
 
-**Expected Result**: Camera zooms in/out smoothly without rotating the cube
+**Expected Result**: Standard pinch zoom behavior - spread to zoom in, pinch to zoom out
 
 #### Test 2: Touch Cube Interaction Still Works
 1. Place one finger on a cube face
@@ -85,9 +85,16 @@ The implementation checks both touches for cube intersection using `getFaceFromT
 const scale = currentDistance / touchState.initialPinchDistance;
 const zoomFactor = scale > 1 ? 0.95 : 1.05;
 ```
-- If distance increases (scale > 1) → zoom out (0.95 makes camera farther)
-- If distance decreases (scale < 1) → zoom in (1.05 makes camera closer)
-- The factors are applied incrementally each frame for smooth zooming
+
+This implements standard pinch zoom behavior:
+- **Pinch OUT** (fingers spread apart): `scale > 1` → `zoomFactor = 0.95` → camera moves closer (zoom IN)
+- **Pinch IN** (fingers together): `scale < 1` → `zoomFactor = 1.05` → camera moves farther (zoom OUT)
+
+In Three.js, `camera.position` represents the distance from the origin:
+- Multiplying by < 1 brings camera closer (zoom in)
+- Multiplying by > 1 moves camera farther (zoom out)
+
+The factors (0.95 and 1.05) are applied incrementally each frame for smooth zooming.
 
 ### Touch Event Priority
 1. Two touches + neither on cube → Pinch zoom (NEW)

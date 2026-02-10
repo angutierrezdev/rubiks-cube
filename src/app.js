@@ -1718,7 +1718,9 @@ container.addEventListener('touchmove', (e) => {
         const currentDistance = getTouchDistance(e.touches[0], e.touches[1]);
         if (touchState.initialPinchDistance) {
             const scale = currentDistance / touchState.initialPinchDistance;
-            const zoomFactor = scale > 1 ? 0.95 : 1.05; // Inverse: pinch out = zoom in
+            // Standard pinch behavior: pinch out (scale > 1) = zoom in, pinch in (scale < 1) = zoom out
+            // In Three.js, smaller camera.position = closer = zoom in, larger = farther = zoom out
+            const zoomFactor = scale > 1 ? 0.95 : 1.05;
             
             camera.position.multiplyScalar(zoomFactor);
             
