@@ -21,6 +21,7 @@ For detailed documentation, see the [docs/](docs/) folder:
 - **[docs/SOLID_REFACTORING.md](docs/SOLID_REFACTORING.md)** - Architectural improvements using SOLID principles
 - **[docs/DESIGN_DECISIONS.md](docs/DESIGN_DECISIONS.md)** - Design rationale and tradeoffs
 - **[docs/TESTING.md](docs/TESTING.md)** - Testing approach and guidelines
+- **[docs/PWA.md](docs/PWA.md)** - Progressive Web App implementation guide
 
 ## Project Structure
 
