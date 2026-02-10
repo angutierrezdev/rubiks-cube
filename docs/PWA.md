@@ -34,7 +34,7 @@ Added PWA-specific elements:
 - Manifest link
 - Theme color meta tag
 - iOS-specific meta tags:
-  - `apple-mobile-web-app-capable`: Enables standalone mode
+  - `mobile-web-app-capable`: Enables standalone mode
   - `apple-mobile-web-app-status-bar-style`: Controls status bar appearance
   - `apple-mobile-web-app-title`: App title on iOS
   - `apple-touch-icon`: Icon for iOS home screen
