@@ -1058,7 +1058,9 @@ let touchState = {
     originalMaterials: null, // Original materials for restoration
     cornerRotationStarted: false, // Whether corner rotation has started (after direction detected)
     selectedAxis: null,   // Selected axis for corner rotation
-    selectedLayer: null   // Selected layer for corner rotation
+    selectedLayer: null,  // Selected layer for corner rotation
+    isPinchZoom: false,   // Whether currently pinch zooming
+    initialPinchDistance: null // Initial distance between two touches for zoom
 };
 
 // Raycaster for detecting which face is touched
@@ -1606,6 +1608,13 @@ function calculateTouchRotationAngle(deltaX, deltaY, axis, layer, cubiePos) {
     return angle;
 }
 
+// Calculate distance between two touches for pinch zoom
+function getTouchDistance(touch1, touch2) {
+    const dx = touch1.clientX - touch2.clientX;
+    const dy = touch1.clientY - touch2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
 container.addEventListener('touchstart', (e) => {
     e.preventDefault();
     
@@ -1616,50 +1625,63 @@ container.addEventListener('touchstart', (e) => {
             previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
         }
     } else if (e.touches.length === 2) {
-        // Two touches - lock cube and enable face swiping
-        touchState.isLocked = true;
-        isDragging = false;
+        // Two touches - check if either is on the cube
+        const faceInfo1 = getFaceFromTouch(e.touches[0]);
+        const faceInfo2 = getFaceFromTouch(e.touches[1]);
         
-        // First touch locks the cube
-        touchState.lockTouch = {
-            id: e.touches[0].identifier,
-            x: e.touches[0].clientX,
-            y: e.touches[0].clientY
-        };
-        
-        // Second touch is for swiping
-        touchState.swipeTouch = {
-            id: e.touches[1].identifier,
-            x: e.touches[1].clientX,
-            y: e.touches[1].clientY
-        };
-        
-        // Detect which face is being touched
-        const faceInfo = getFaceFromTouch(e.touches[1]);
-        if (faceInfo) {
-            touchState.swipeStartFace = faceInfo;
-            const initialPos = {
+        // If neither touch is on the cube, enable pinch zoom
+        if (!faceInfo1 && !faceInfo2) {
+            touchState.isPinchZoom = true;
+            touchState.isLocked = false;
+            isDragging = false;
+            touchState.initialPinchDistance = getTouchDistance(e.touches[0], e.touches[1]);
+        } else {
+            // At least one touch is on the cube - enable face swiping
+            touchState.isPinchZoom = false;
+            touchState.isLocked = true;
+            isDragging = false;
+            
+            // First touch locks the cube
+            touchState.lockTouch = {
+                id: e.touches[0].identifier,
+                x: e.touches[0].clientX,
+                y: e.touches[0].clientY
+            };
+            
+            // Second touch is for swiping
+            touchState.swipeTouch = {
+                id: e.touches[1].identifier,
                 x: e.touches[1].clientX,
                 y: e.touches[1].clientY
             };
-            touchState.swipeStartPos = initialPos;
-            touchState.swipeInitialPos = initialPos; // Store initial position
-            // Highlight the touched cubie - pass the face normal to highlight only that face
-            highlightCubie(faceInfo.cubie, faceInfo.normal);
             
-            // Update debug panel with initial face info
-            updateDebugPanel(faceInfo, 0, 0);
-            
-            // For corner and center cubies, delay rotation start until swipe direction is known
-            if (faceInfo.cubieType === 'corner' || faceInfo.cubieType === 'center') {
-                touchState.cornerRotationStarted = false;
-        touchState.selectedAxis = null;
-        touchState.selectedLayer = null;
-                // Don't start rotation yet - wait for first move
-            } else {
-                // For edge cubies, start rotation immediately with clicked face
-                touchState.cornerRotationStarted = true;
-                startFaceRotation(faceInfo.axis, faceInfo.layer, 0);
+            // Detect which face is being touched (prefer the second touch, fall back to first)
+            const faceInfo = faceInfo2 || faceInfo1;
+            if (faceInfo) {
+                touchState.swipeStartFace = faceInfo;
+                const initialPos = {
+                    x: faceInfo === faceInfo2 ? e.touches[1].clientX : e.touches[0].clientX,
+                    y: faceInfo === faceInfo2 ? e.touches[1].clientY : e.touches[0].clientY
+                };
+                touchState.swipeStartPos = initialPos;
+                touchState.swipeInitialPos = initialPos; // Store initial position
+                // Highlight the touched cubie - pass the face normal to highlight only that face
+                highlightCubie(faceInfo.cubie, faceInfo.normal);
+                
+                // Update debug panel with initial face info
+                updateDebugPanel(faceInfo, 0, 0);
+                
+                // For corner and center cubies, delay rotation start until swipe direction is known
+                if (faceInfo.cubieType === 'corner' || faceInfo.cubieType === 'center') {
+                    touchState.cornerRotationStarted = false;
+            touchState.selectedAxis = null;
+            touchState.selectedLayer = null;
+                    // Don't start rotation yet - wait for first move
+                } else {
+                    // For edge cubies, start rotation immediately with clicked face
+                    touchState.cornerRotationStarted = true;
+                    startFaceRotation(faceInfo.axis, faceInfo.layer, 0);
+                }
             }
         }
     }
@@ -1690,6 +1712,23 @@ container.addEventListener('touchmove', (e) => {
             
             previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
             updateFrontFaceIndicator();
+        }
+    } else if (e.touches.length === 2 && touchState.isPinchZoom) {
+        // Two touches - pinch zoom (only when not touching the cube)
+        const currentDistance = getTouchDistance(e.touches[0], e.touches[1]);
+        if (touchState.initialPinchDistance) {
+            const scale = currentDistance / touchState.initialPinchDistance;
+            const zoomFactor = scale > 1 ? 0.95 : 1.05; // Inverse: pinch out = zoom in
+            
+            camera.position.multiplyScalar(zoomFactor);
+            
+            // Clamp zoom to match wheel zoom limits
+            const dist = camera.position.length();
+            if (dist < 5) camera.position.normalize().multiplyScalar(5);
+            if (dist > 20) camera.position.normalize().multiplyScalar(20);
+            
+            // Update initial distance for next frame
+            touchState.initialPinchDistance = currentDistance;
         }
     } else if (e.touches.length === 2 && touchState.isLocked) {
         // Two touches - update swipe
@@ -1812,6 +1851,8 @@ container.addEventListener('touchend', (e) => {
         isDragging = false;
         touchState.isLocked = false;
         touchState.lockTouch = null;
+        touchState.isPinchZoom = false;
+        touchState.initialPinchDistance = null;
         
         if (touchState.swipeTouch && touchState.rotationGroup) {
             // Complete the face rotation
@@ -1832,6 +1873,10 @@ container.addEventListener('touchend', (e) => {
     } else if (e.touches.length === 1) {
         // One touch remains - check if it's the lock or swipe
         const remainingId = e.touches[0].identifier;
+        
+        // Reset pinch zoom state when going from 2 touches to 1
+        touchState.isPinchZoom = false;
+        touchState.initialPinchDistance = null;
         
         if (touchState.lockTouch && remainingId === touchState.lockTouch.id) {
             // Lock touch remains, swipe ended
