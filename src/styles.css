@@ -270,7 +270,7 @@ button:disabled {
 }
 
 /* Extra small mobile devices */
-@media (max-width: 360px) {
+@media (max-width: 375px) {
     #ai-test-banner {
         font-size: 10px;
         padding: 5px 8px;
