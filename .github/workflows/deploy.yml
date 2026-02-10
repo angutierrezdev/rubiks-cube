@@ -54,6 +54,15 @@ jobs:
       - name: Copy LICENSE
         run: cp LICENSE dist/LICENSE
 
+      - name: Copy manifest.json
+        run: cp manifest.json dist/manifest.json
+
+      - name: Copy service worker
+        run: cp sw.js dist/sw.js
+
+      - name: Copy favicon
+        run: cp rubiks-cube.ico dist/rubiks-cube.ico
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 

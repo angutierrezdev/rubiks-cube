@@ -2,7 +2,7 @@
   "name": "3D Rubik's Cube Simulation",
   "short_name": "Rubik's Cube",
   "description": "A fully functional 3D Rubik's Cube simulation with solve capability",
-  "start_url": "/",
+  "start_url": ".",
   "display": "standalone",
   "background_color": "#1a1a1a",
   "theme_color": "#4285f4",

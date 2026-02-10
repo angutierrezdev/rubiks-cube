@@ -1,19 +1,21 @@
 const VERSION = '1.0.0';
 const CACHE_NAME = `rubiks-cube-v${VERSION}`;
+// Derive base path from SW location (e.g. '' for user site, '/rubiks-cube' for project site)
+const BASE = self.location.pathname.replace(/\/sw\.js$/i, '') || '';
 const urlsToCache = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/rubiks-cube.ico',
-  '/src/styles.css',
-  '/src/app.js',
-  '/src/core/cube.js',
-  '/src/rendering/cubeRenderer.js',
-  '/src/rendering/highlightManager.js',
-  '/src/strategies/rotationStrategy.js',
-  '/src/controllers/uiController.js',
-  '/src/controllers/cameraController.js',
-  '/src/controllers/touchHandler.js',
+  BASE + '/',
+  BASE + '/index.html',
+  BASE + '/manifest.json',
+  BASE + '/rubiks-cube.ico',
+  BASE + '/src/styles.css',
+  BASE + '/src/app.js',
+  BASE + '/src/core/cube.js',
+  BASE + '/src/rendering/cubeRenderer.js',
+  BASE + '/src/rendering/highlightManager.js',
+  BASE + '/src/strategies/rotationStrategy.js',
+  BASE + '/src/controllers/uiController.js',
+  BASE + '/src/controllers/cameraController.js',
+  BASE + '/src/controllers/touchHandler.js',
   'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js'
 ];
 
