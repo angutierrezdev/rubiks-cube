@@ -8,6 +8,7 @@ A fully functional 3D Rubik's Cube simulation built with Three.js. Features smoo
 2. **Interact with the cube**:
    - 🖱️ Drag to rotate the view
    - 🔄 Scroll to zoom in/out
+   - 🤏 Pinch to zoom (on touch devices, when not touching the cube)
    - 🎲 Click **Scramble** to randomize
    - ✨ Click **Solve** to auto-solve
    - ⌨️ Use R, U, D, L, F, B keys (Shift for prime moves)
@@ -53,6 +54,7 @@ rubiks-cube/
 
 - 🎮 **Interactive 3D Cube** - Rotate the view by dragging
 - 🔄 **Zoom Control** - Scroll to zoom in and out
+- 🤏 **Pinch Zoom** - Touch pinch to zoom (when not touching cube)
 - 🎲 **Scramble** - Randomly scramble with 20 moves
 - ✨ **Auto-Solve** - Watch the cube solve itself
 - 🔁 **Reset** - Return to solved state instantly
