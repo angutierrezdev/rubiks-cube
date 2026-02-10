@@ -91,10 +91,10 @@
             .then(registration => {
               console.log('ServiceWorker registered:', registration);
               
-              // Check for updates every 60 seconds
+              // Check for updates every 5 minutes
               setInterval(() => {
                 registration.update();
-              }, 60000);
+              }, 300000);
               
               // Listen for updates
               registration.addEventListener('updatefound', () => {
@@ -139,7 +139,7 @@
               box-shadow: 0 2px 5px rgba(0,0,0,0.2);
             ">
               <span style="margin-right: 15px;">🎉 A new version is available!</span>
-              <button onclick="updateApp()" style="
+              <button id="update-now-btn" style="
                 background: white;
                 color: #4285f4;
                 border: none;
@@ -149,7 +149,7 @@
                 font-weight: bold;
                 margin-right: 10px;
               ">Update Now</button>
-              <button onclick="dismissUpdate()" style="
+              <button id="update-later-btn" style="
                 background: transparent;
                 color: white;
                 border: 1px solid white;
@@ -167,6 +167,10 @@
           }
           
           document.body.appendChild(updateBanner);
+          
+          // Add event listeners for buttons
+          document.getElementById('update-now-btn').addEventListener('click', updateApp);
+          document.getElementById('update-later-btn').addEventListener('click', dismissUpdate);
         }
 
         // Function to update the app

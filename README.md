@@ -101,7 +101,7 @@ This application is a fully functional Progressive Web App that can be installed
 ### Features
 
 - **Offline Support**: Works without internet connection after first visit
-- **Auto-Update Check**: Checks for new versions every 60 seconds
+- **Auto-Update Check**: Checks for new versions every 5 minutes
 - **Update Notifications**: Shows banner when new version is available
 - **Splash Screen**: Native app-like launch experience
 - **App Icons**: Custom Rubik's cube icon for home screen
