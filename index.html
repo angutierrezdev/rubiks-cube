@@ -2,9 +2,27 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>3D Rubik's Cube Simulation</title>
+    
+    <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="rubiks-cube.ico">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json">
+    
+    <!-- Theme color for browser UI -->
+    <meta name="theme-color" content="#4285f4">
+    
+    <!-- iOS specific meta tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Rubik's Cube">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cg transform='translate(50,50) rotateX(-35deg) rotateZ(-45deg)'%3E%3Crect x='-30' y='-30' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='-10' y='-30' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='10' y='-30' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='-30' y='-10' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='-10' y='-10' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='10' y='-10' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='-30' y='10' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='-10' y='10' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='10' y='10' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3C/g%3E%3C/svg%3E">
+    
+    <!-- Description for search engines and sharing -->
+    <meta name="description" content="A fully functional 3D Rubik's Cube simulation with solve capability">
+    
     <link rel="stylesheet" href="src/styles.css">
 </head>
 <body>
@@ -63,5 +81,116 @@
     <script src="src/controllers/touchHandler.js"></script>
     <script src="src/core/cube.js"></script>
     <script src="src/app.js"></script>
+    
+    <!-- Service Worker Registration and Update Check -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        // Register service worker
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(registration => {
+              console.log('ServiceWorker registered:', registration);
+              
+              // Check for updates every 5 minutes
+              setInterval(() => {
+                registration.update();
+              }, 300000);
+              
+              // Listen for updates
+              registration.addEventListener('updatefound', () => {
+                const newWorker = registration.installing;
+                newWorker.addEventListener('statechange', () => {
+                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    // New service worker available, show update notification
+                    showUpdateNotification();
+                  }
+                });
+              });
+            })
+            .catch(err => {
+              console.log('ServiceWorker registration failed:', err);
+            });
+        });
+
+        // Listen for messages from service worker
+        navigator.serviceWorker.addEventListener('message', event => {
+          if (event.data && event.data.type === 'UPDATE_AVAILABLE') {
+            console.log('New version available:', event.data.version);
+            showUpdateNotification();
+          }
+        });
+
+        // Function to show update notification
+        function showUpdateNotification() {
+          const updateBanner = document.createElement('div');
+          updateBanner.id = 'update-banner';
+          updateBanner.innerHTML = `
+            <div style="
+              position: fixed;
+              top: 0;
+              left: 0;
+              right: 0;
+              background: #4285f4;
+              color: white;
+              padding: 12px 20px;
+              text-align: center;
+              z-index: 10000;
+              font-family: Arial, sans-serif;
+              box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            ">
+              <span style="margin-right: 15px;">🎉 A new version is available!</span>
+              <button id="update-now-btn" style="
+                background: white;
+                color: #4285f4;
+                border: none;
+                padding: 6px 16px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-weight: bold;
+                margin-right: 10px;
+              ">Update Now</button>
+              <button id="update-later-btn" style="
+                background: transparent;
+                color: white;
+                border: 1px solid white;
+                padding: 6px 16px;
+                border-radius: 4px;
+                cursor: pointer;
+              ">Later</button>
+            </div>
+          `;
+          
+          // Remove any existing update banner
+          const existingBanner = document.getElementById('update-banner');
+          if (existingBanner) {
+            existingBanner.remove();
+          }
+          
+          document.body.appendChild(updateBanner);
+          
+          // Add event listeners for buttons
+          document.getElementById('update-now-btn').addEventListener('click', updateApp);
+          document.getElementById('update-later-btn').addEventListener('click', dismissUpdate);
+        }
+
+        // Function to update the app
+        window.updateApp = function() {
+          navigator.serviceWorker.getRegistration().then(registration => {
+            if (registration && registration.waiting) {
+              registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            }
+          });
+          window.location.reload();
+        };
+
+        // Function to dismiss update notification
+        window.dismissUpdate = function() {
+          const banner = document.getElementById('update-banner');
+          if (banner) {
+            banner.remove();
+          }
+        };
+      }
+    </script>
 </body>
 </html>

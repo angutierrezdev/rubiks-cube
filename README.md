@@ -21,6 +21,7 @@ For detailed documentation, see the [docs/](docs/) folder:
 - **[docs/SOLID_REFACTORING.md](docs/SOLID_REFACTORING.md)** - Architectural improvements using SOLID principles
 - **[docs/DESIGN_DECISIONS.md](docs/DESIGN_DECISIONS.md)** - Design rationale and tradeoffs
 - **[docs/TESTING.md](docs/TESTING.md)** - Testing approach and guidelines
+- **[docs/PWA.md](docs/PWA.md)** - Progressive Web App implementation guide
 
 ## Project Structure
 
@@ -60,6 +61,8 @@ rubiks-cube/
 - 🎨 **Front Face Indicator** - Visual feedback
 - 📱 **Touch Support** - Full mobile device support
 - 🎬 **Smooth Animations** - Eased animations with queue system
+- 📲 **PWA Support** - Install as app on iOS and Android
+- 🔄 **Auto-Update Check** - Automatic version checking with user notification
 
 ## Architecture
 
@@ -72,6 +75,48 @@ This project follows **SOLID principles**:
 - **Dependency Inversion**: Rendering abstraction layer
 
 See [docs/SOLID_REFACTORING.md](docs/SOLID_REFACTORING.md) for detailed architecture documentation.
+
+## Progressive Web App (PWA)
+
+This application is a fully functional Progressive Web App that can be installed on both iOS and Android devices:
+
+### Installation
+
+**Desktop (Chrome/Edge):**
+1. Visit the application in your browser
+2. Look for the install icon in the address bar
+3. Click "Install" to add to your desktop
+
+**iOS (Safari):**
+1. Open the app in Safari
+2. Tap the Share button (square with arrow pointing up)
+3. Scroll down and tap "Add to Home Screen"
+4. Name the app and tap "Add"
+
+**Android (Chrome):**
+1. Open the app in Chrome
+2. Tap the menu (three dots)
+3. Tap "Add to Home Screen" or "Install App"
+4. Confirm installation
+
+### Features
+
+- **Offline Support**: Works without internet connection after first visit
+- **Auto-Update Check**: Checks for new versions every 5 minutes
+- **Update Notifications**: Shows banner when new version is available
+- **Splash Screen**: Native app-like launch experience
+- **App Icons**: Custom Rubik's cube icon for home screen
+- **Standalone Mode**: Runs in full screen without browser UI
+
+### Version Management
+
+The service worker automatically manages caching and updates. When a new version is deployed:
+1. The app detects the new version in the background
+2. A notification banner appears: "🎉 A new version is available!"
+3. Users can click "Update Now" to reload with the latest version
+4. Or click "Later" to continue with the current version
+
+To update the app version, modify the `VERSION` constant in `sw.js`.
 
 ## License
 
