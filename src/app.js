@@ -1674,8 +1674,8 @@ container.addEventListener('touchstart', (e) => {
                 // For corner and center cubies, delay rotation start until swipe direction is known
                 if (faceInfo.cubieType === 'corner' || faceInfo.cubieType === 'center') {
                     touchState.cornerRotationStarted = false;
-            touchState.selectedAxis = null;
-            touchState.selectedLayer = null;
+                    touchState.selectedAxis = null;
+                    touchState.selectedLayer = null;
                     // Don't start rotation yet - wait for first move
                 } else {
                     // For edge cubies, start rotation immediately with clicked face
@@ -1718,19 +1718,23 @@ container.addEventListener('touchmove', (e) => {
         const currentDistance = getTouchDistance(e.touches[0], e.touches[1]);
         if (touchState.initialPinchDistance) {
             const scale = currentDistance / touchState.initialPinchDistance;
-            // Standard pinch behavior: pinch out (scale > 1) = zoom in, pinch in (scale < 1) = zoom out
-            // In Three.js, smaller camera.position = closer = zoom in, larger = farther = zoom out
-            const zoomFactor = scale > 1 ? 0.95 : 1.05;
             
-            camera.position.multiplyScalar(zoomFactor);
-            
-            // Clamp zoom to match wheel zoom limits
-            const dist = camera.position.length();
-            if (dist < 5) camera.position.normalize().multiplyScalar(5);
-            if (dist > 20) camera.position.normalize().multiplyScalar(20);
-            
-            // Update initial distance for next frame
-            touchState.initialPinchDistance = currentDistance;
+            // Only zoom if the scale change is significant enough (prevents jittery zooming)
+            if (Math.abs(scale - 1) > 0.01) {
+                // Standard pinch behavior: pinch out (scale > 1) = zoom in, pinch in (scale < 1) = zoom out
+                // In Three.js, smaller camera.position = closer = zoom in, larger = farther = zoom out
+                const zoomFactor = scale > 1 ? 0.95 : 1.05;
+                
+                camera.position.multiplyScalar(zoomFactor);
+                
+                // Clamp zoom to match wheel zoom limits
+                const dist = camera.position.length();
+                if (dist < 5) camera.position.normalize().multiplyScalar(5);
+                if (dist > 20) camera.position.normalize().multiplyScalar(20);
+                
+                // Update initial distance for next frame
+                touchState.initialPinchDistance = currentDistance;
+            }
         }
     } else if (e.touches.length === 2 && touchState.isLocked) {
         // Two touches - update swipe
