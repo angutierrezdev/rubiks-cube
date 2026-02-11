@@ -9,15 +9,21 @@
   "orientation": "any",
   "icons": [
     {
-      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cg transform='translate(50,50) rotateX(-35deg) rotateZ(-45deg)'%3E%3Crect x='-30' y='-30' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='-10' y='-30' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='10' y='-30' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='-30' y='-10' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='-10' y='-10' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='10' y='-10' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='-30' y='10' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='-10' y='10' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='10' y='10' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3C/g%3E%3C/svg%3E",
+      "src": "images/icon-192x192.png",
       "sizes": "192x192",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cg transform='translate(50,50) rotateX(-35deg) rotateZ(-45deg)'%3E%3Crect x='-30' y='-30' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='-10' y='-30' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='10' y='-30' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='-30' y='-10' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='-10' y='-10' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='10' y='-10' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='-30' y='10' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='-10' y='10' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3Crect x='10' y='10' width='20' height='20' fill='%23ff0000' stroke='%23000' stroke-width='1'/%3E%3C/g%3E%3C/svg%3E",
+      "src": "images/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "images/icon-512x512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]
