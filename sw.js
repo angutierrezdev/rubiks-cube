@@ -1,4 +1,4 @@
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const CACHE_NAME = `rubiks-cube-v${VERSION}`;
 // Derive base path from SW location (e.g. '' for user site, '/rubiks-cube' for project site)
 const BASE = self.location.pathname.replace(/\/sw\.js$/i, '') || '';
