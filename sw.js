@@ -6,7 +6,6 @@ const urlsToCache = [
   BASE + '/',
   BASE + '/index.html',
   BASE + '/manifest.json',
-  BASE + '/rubiks-cube.ico',
   BASE + '/src/styles.css',
   BASE + '/src/app.js',
   BASE + '/src/core/cube.js',
@@ -16,6 +15,13 @@ const urlsToCache = [
   BASE + '/src/controllers/uiController.js',
   BASE + '/src/controllers/cameraController.js',
   BASE + '/src/controllers/touchHandler.js',
+  // Icon files
+  BASE + '/images/favicon.ico',
+  BASE + '/images/favicon.png',
+  BASE + '/images/apple-touch-icon.png',
+  BASE + '/images/icon-192x192.png',
+  BASE + '/images/icon-384x384.png',
+  BASE + '/images/icon-512x512.png',
   'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js'
 ];
 
