@@ -8,7 +8,7 @@
     
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="images/favicon.ico">
-    <link rel="icon" type="image/png" sizes="32x32" href="images/favicon.png">
+    <link rel="icon" type="image/png" sizes="32x27" href="images/favicon.png">
     
     <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
@@ -31,7 +31,11 @@
     <!-- Splash Screen -->
     <div id="splash-screen" class="splash-screen">
         <div class="splash-content">
-            <img src="images/icon-512x512.png" alt="Rubik's Cube" class="splash-icon">
+            <img
+                src="images/icon-192x192.png"
+                srcset="images/icon-192x192.png 1x, images/icon-384x384.png 2x, images/icon-512x512.png 3x"
+                alt="Rubik's Cube"
+                class="splash-icon">
             <h1 class="splash-title">Rubik's Cube</h1>
             <div class="spinner"></div>
             <p class="splash-text">Loading...</p>
