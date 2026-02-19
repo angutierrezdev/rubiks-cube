@@ -12,6 +12,97 @@ body {
     width: 100vw;
     height: 100vh;
 }
+
+/* Splash Screen Styles */
+.splash-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    opacity: 1;
+    transition: opacity 0.5s ease-out;
+}
+
+.splash-screen.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.splash-content {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    animation: splash-fade-in 0.6s ease-out;
+}
+
+@keyframes splash-fade-in {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.splash-icon {
+    width: 120px;
+    height: 120px;
+    animation: splash-grow 2s ease-in-out infinite;
+}
+
+@keyframes splash-grow {
+    0% {
+        transform: scale(0.6);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+    100% {
+        transform: scale(0.6);
+    }
+}
+
+.splash-title {
+    font-size: 32px;
+    font-weight: bold;
+    margin: 0;
+    color: #4285f4;
+    letter-spacing: 1px;
+}
+
+.splash-text {
+    font-size: 14px;
+    color: #999;
+    margin: 0;
+    letter-spacing: 2px;
+}
+
+/* Spinner Animation */
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid rgba(255, 255, 255, 0.2);
+    border-top: 4px solid #4285f4;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 #controls {
     position: fixed;
     top: 20px;

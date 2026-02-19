@@ -48,6 +48,12 @@ jobs:
       - name: Minify CSS
         run: cleancss -o dist/src/styles.css src/styles.css
 
+      - name: Copy images
+        run: |
+          mkdir -p dist/images
+          cp images/*.png dist/images/ 2>/dev/null || true
+          cp images/*.ico dist/images/ 2>/dev/null || true
+
       - name: Copy HTML and update references
         run: cp index.html dist/index.html
 
@@ -61,7 +67,9 @@ jobs:
         run: cp sw.js dist/sw.js
 
       - name: Copy favicon
-        run: cp rubiks-cube.ico dist/rubiks-cube.ico
+        run: |
+          cp images/favicon.ico dist/images/favicon.ico
+          cp images/favicon.ico dist/favicon.ico
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
