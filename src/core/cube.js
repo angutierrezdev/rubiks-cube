@@ -46,6 +46,7 @@ class RubiksCube {
         this.moveHistory = [];
         this.isAnimating = false;
         this.animationQueue = [];
+        this.state = typeof CubeState !== 'undefined' ? new CubeState() : null;
     }
 
     /**
@@ -187,6 +188,9 @@ class RubiksCube {
         this.cubies = [];
         this.moveHistory = [];
         this.animationQueue = [];
+        if (this.state) {
+            this.state.reset();
+        }
 
         for (let x = -1; x <= 1; x++) {
             for (let y = -1; y <= 1; y++) {
@@ -218,18 +222,18 @@ class RubiksCube {
     /**
      * Rotate a face
      */
-    rotateFace(axis, layer, direction, record = true, callback = null) {
+    rotateFace(axis, layer, direction, record = true, callback = null, duration = 200) {
         if (this.isAnimating) {
-            this.animationQueue.push({ axis, layer, direction, record, callback });
+            this.animationQueue.push({ axis, layer, direction, record, callback, duration });
             return;
         }
 
         this.isAnimating = true;
         const faceCubies = this.getCubiesOnFace(axis, layer);
-        
+
         const rotationGroup = new THREE.Group();
         this.cubeGroup.add(rotationGroup);
-        
+
         faceCubies.forEach(cubie => {
             const localPos = cubie.position.clone();
             this.cubeGroup.remove(cubie);
@@ -238,7 +242,6 @@ class RubiksCube {
         });
 
         const angle = direction * Math.PI / 2;
-        const duration = 200;
         const startTime = Date.now();
 
         const animate = () => {
@@ -279,20 +282,24 @@ class RubiksCube {
                 });
                 
                 this.cubeGroup.remove(rotationGroup);
-                
+
+                if (this.state) {
+                    this.state.applyRotation(axis, layer, direction);
+                }
+
                 if (record) {
                     this.moveHistory.push({ axis, layer, direction });
                 }
-                
+
                 this.isAnimating = false;
-                
+
                 if (callback) {
                     callback();
                 }
-                
+
                 if (this.animationQueue.length > 0) {
                     const next = this.animationQueue.shift();
-                    this.rotateFace(next.axis, next.layer, next.direction, next.record, next.callback);
+                    this.rotateFace(next.axis, next.layer, next.direction, next.record, next.callback, next.duration);
                 }
             }
         };
@@ -303,10 +310,10 @@ class RubiksCube {
     /**
      * Execute a move by name
      */
-    executeMove(moveName, record = true, callback = null) {
+    executeMove(moveName, record = true, callback = null, duration = 200) {
         const move = MOVES[moveName];
         if (move) {
-            this.rotateFace(move.axis, move.layer, move.direction, record, callback);
+            this.rotateFace(move.axis, move.layer, move.direction, record, callback, duration);
         }
     }
 
@@ -335,35 +342,6 @@ class RubiksCube {
                 });
             } else {
                 if (onComplete) onComplete();
-            }
-        };
-        
-        doNextMove();
-    }
-
-    /**
-     * Solve the cube (reverse the moves)
-     */
-    solve(onComplete = null) {
-        if (this.isAnimating || this.animationQueue.length > 0) return;
-        if (this.moveHistory.length === 0) {
-            if (onComplete) onComplete(true); // true indicates already solved
-            return;
-        }
-        
-        const solveMoves = [...this.moveHistory].reverse();
-        this.moveHistory = [];
-        
-        let index = 0;
-        const doNextMove = () => {
-            if (index < solveMoves.length) {
-                const move = solveMoves[index];
-                this.rotateFace(move.axis, move.layer, -move.direction, false, () => {
-                    index++;
-                    doNextMove();
-                });
-            } else {
-                if (onComplete) onComplete(false); // false indicates solving completed
             }
         };
         
@@ -400,10 +378,15 @@ class RubiksCube {
     }
 
     /**
-     * Record a move in the history (for external rotations)
+     * Record a move in the history (for external rotations).
+     * Also keeps the logical state in sync, since external rotations
+     * animate outside rotateFace.
      */
     recordMove(axis, layer, direction) {
         this.moveHistory.push({ axis, layer, direction });
+        if (this.state) {
+            this.state.applyRotation(axis, layer, direction);
+        }
     }
 }
 

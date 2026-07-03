@@ -47,8 +47,13 @@
     <div id="controls">
         <button id="scrambleBtn">Scramble</button>
         <button id="solveBtn">Solve</button>
+        <select id="solverSelect" aria-label="Solving method">
+            <option value="layered" selected>Layered Method</option>
+            <option value="retrace">Retrace Moves</option>
+        </select>
         <button id="resetBtn">Reset</button>
     </div>
+    <div id="solve-progress"></div>
     <div id="status">Ready</div>
     <div id="front-face-indicator">
         <span>Front Face:</span>
@@ -91,10 +96,13 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
     <script src="src/rendering/cubeRenderer.js"></script>
     <script src="src/strategies/rotationStrategy.js"></script>
+    <script src="src/strategies/solverStrategy.js"></script>
+    <script src="src/strategies/layeredMethodSolver.js"></script>
     <script src="src/controllers/uiController.js"></script>
     <script src="src/controllers/cameraController.js"></script>
     <script src="src/rendering/highlightManager.js"></script>
     <script src="src/controllers/touchHandler.js"></script>
+    <script src="src/core/cubeState.js"></script>
     <script src="src/core/cube.js"></script>
     <script>
         // Splash screen management
