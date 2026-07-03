@@ -152,6 +152,30 @@ button:disabled {
     cursor: not-allowed;
     transform: none !important;
 }
+#solverSelect {
+    padding: 10px 12px;
+    font-size: 14px;
+    font-weight: bold;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    letter-spacing: 1px;
+}
+#solve-progress {
+    position: fixed;
+    bottom: 62px;
+    left: 20px;
+    display: none;
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 10px 15px;
+    border-radius: 8px;
+    z-index: 100;
+}
 #status {
     position: fixed;
     bottom: 20px;
@@ -344,6 +368,20 @@ button:disabled {
         font-size: 12px;
         padding: 8px 12px;
         gap: 8px;
+    }
+
+    #solverSelect {
+        padding: 10px 8px;
+        font-size: 12px;
+        flex: 1;
+        min-width: 0;
+    }
+
+    #solve-progress {
+        bottom: 80px;
+        left: 10px;
+        font-size: 12px;
+        padding: 8px 12px;
     }
     
     #front-face-color {

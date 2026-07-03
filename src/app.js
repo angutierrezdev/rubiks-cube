@@ -411,21 +411,84 @@ function scramble() {
     });
 }
 
-// Solve the cube (reverse the moves)
+// Solving methods (Strategy pattern, like rotationStrategy)
+const SOLVE_MOVE_DURATION = 90; // faster than manual moves so long solutions stay watchable
+const solverStrategies = {
+    layered: new LayeredMethodSolver(),
+    retrace: new RetraceSolver()
+};
+const solverSelect = document.getElementById('solverSelect');
+const solveProgressEl = document.getElementById('solve-progress');
+let isAutoSolving = false;
+
+function getSelectedSolver() {
+    const key = solverSelect ? solverSelect.value : 'layered';
+    return solverStrategies[key] || solverStrategies.layered;
+}
+
+function showSolveProgress(text) {
+    if (solveProgressEl) {
+        solveProgressEl.textContent = text;
+        solveProgressEl.style.display = 'block';
+    }
+}
+
+function hideSolveProgress() {
+    if (solveProgressEl) {
+        solveProgressEl.style.display = 'none';
+    }
+}
+
+// Solve the cube with the selected method
 function solve() {
-    if (rubiksCube.getIsAnimating() || rubiksCube.getAnimationQueueLength() > 0) return;
-    
-    uiController.updateStatus('Solving...');
+    if (isAutoSolving || rubiksCube.getIsAnimating() || rubiksCube.getAnimationQueueLength() > 0) return;
+
+    const solver = getSelectedSolver();
+    let stages;
+    try {
+        stages = solver.solve({ state: rubiksCube.state, history: rubiksCube.moveHistory });
+    } catch (err) {
+        console.error('Solver failed:', err);
+        uiController.updateStatus('Solver failed — try Retrace Moves or Reset');
+        return;
+    }
+
+    if (stages.length === 0) {
+        uiController.updateStatus('Cube is already solved!');
+        return;
+    }
+
+    isAutoSolving = true;
+    uiController.updateStatus(`Solving with ${solver.getName()}...`);
     uiController.disableButtons();
-    
-    rubiksCube.solve((alreadySolved) => {
-        if (alreadySolved) {
-            uiController.updateStatus('Cube is already solved!');
-        } else {
+
+    const totalMoves = stages.reduce((n, st) => n + st.moves.length, 0);
+    let played = 0;
+
+    const playStage = (stageIndex) => {
+        if (stageIndex >= stages.length) {
+            rubiksCube.moveHistory = [];
+            isAutoSolving = false;
+            hideSolveProgress();
             uiController.updateStatus('Solved! ✨');
+            uiController.enableButtons();
+            return;
         }
-        uiController.enableButtons();
-    });
+        const stage = stages[stageIndex];
+        const playMove = (moveIndex) => {
+            if (moveIndex >= stage.moves.length) {
+                playStage(stageIndex + 1);
+                return;
+            }
+            const move = stage.moves[moveIndex];
+            played++;
+            showSolveProgress(`${stage.stage} — ${move.name}  (${played}/${totalMoves})`);
+            rubiksCube.rotateFace(move.axis, move.layer, move.direction, false,
+                () => playMove(moveIndex + 1), SOLVE_MOVE_DURATION);
+        };
+        playMove(0);
+    };
+    playStage(0);
 }
 
 // Reset the cube
@@ -2143,8 +2206,9 @@ function getOrientedMove(key, isPrime) {
 
 // Keyboard controls
 document.addEventListener('keydown', (e) => {
-    // Ignore if typing in an input field
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    // Ignore if typing in an input field or while auto-solving
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+    if (isAutoSolving) return;
     
     const key = e.key.toUpperCase();
     const validMoves = ['R', 'U', 'D', 'L', 'F', 'B'];
