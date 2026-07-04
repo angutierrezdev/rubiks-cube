@@ -41,6 +41,7 @@ jobs:
           mkdir -p dist/src/core dist/src/rendering dist/src/strategies dist/src/controllers
           uglifyjs src/core/cube.js -o dist/src/core/cube.js --compress --mangle
           uglifyjs src/core/cubeState.js -o dist/src/core/cubeState.js --compress --mangle
+          uglifyjs src/core/stepSession.js -o dist/src/core/stepSession.js --compress --mangle
           uglifyjs src/rendering/cubeRenderer.js -o dist/src/rendering/cubeRenderer.js --compress --mangle
           uglifyjs src/strategies/rotationStrategy.js -o dist/src/strategies/rotationStrategy.js --compress --mangle
           uglifyjs src/strategies/solverStrategy.js -o dist/src/strategies/solverStrategy.js --compress --mangle

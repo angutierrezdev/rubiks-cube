@@ -401,10 +401,11 @@ function executeMove(moveName, record = true, callback = null) {
 // Scramble the cube
 function scramble() {
     if (rubiksCube.getIsAnimating() || rubiksCube.getAnimationQueueLength() > 0) return;
-    
+
+    invalidateStepSession(); // a new scramble is a new puzzle
     uiController.updateStatus('Scrambling...');
     uiController.disableButtons();
-    
+
     rubiksCube.scramble(() => {
         uiController.updateStatus('Scrambled! Click Solve to auto-solve');
         uiController.enableButtons();
@@ -439,9 +440,202 @@ function hideSolveProgress() {
     }
 }
 
+// ---- Step-by-step solve mode (bottom sheet driven by StepSession) ----
+const STEP_REWIND_DURATION = 45; // rewinds can be long, play them extra fast
+const STEP_INFO = {
+    1: { goal: 'Bring the four white edges up around the yellow center, like the petals of a daisy.', alg: 'No fixed algorithm — move each white edge up case by case' },
+    2: { goal: 'Turn the top until each petal’s side color matches its center, then drop it with a double turn.', alg: 'U (align) + F2' },
+    3: { goal: 'Put each white corner above its slot (between its two matching centers) and insert it.', alg: "R U R'  ·  F' U' F  ·  R F R2 F' R'" },
+    4: { goal: 'Find top edges without white or yellow, match their side color to a center, and insert left or right.', alg: "U R U' R' U' F' U F (right)  ·  U' L' U L U F U' F' (left)" },
+    5: { goal: 'Make a yellow cross on top: dot → L-shape → line → cross.', alg: "F R U R' U' F'" },
+    6: { goal: 'Twist each yellow corner at the front-right until yellow faces up, then turn U to bring the next one.', alg: "R' D' R D (repeat in pairs)" },
+    7: { goal: 'Move the yellow corners to the slots matching their colors.', alg: "R' F R' B2 R F' R' B2 R2  ·  T-perm for a swap" },
+    8: { goal: 'Cycle the last yellow edges into place. The cube ends solved!', alg: "R U' R U R U R U' R' U' R2" }
+};
+
+const stepsBtn = document.getElementById('stepsBtn');
+const stepSheet = document.getElementById('step-sheet');
+const stepSheetClose = document.getElementById('step-sheet-close');
+const stepSheetStatus = document.getElementById('step-sheet-status');
+const stepList = document.getElementById('step-list');
+const stepInstructions = document.getElementById('step-instructions');
+const stepInstructionsTitle = document.getElementById('step-instructions-title');
+const stepInstructionsGoal = document.getElementById('step-instructions-goal');
+const stepInstructionsAlg = document.getElementById('step-instructions-alg');
+const stepInstructionsMoves = document.getElementById('step-instructions-moves');
+const stepPlayBtn = document.getElementById('step-play-btn');
+let stepSession = null;
+
+function stepModeActive() {
+    return stepSession !== null && stepSession.alive;
+}
+
+function ensureStepSession() {
+    if (!stepModeActive()) {
+        stepSession = new StepSession(solverStrategies.layered, rubiksCube.state);
+    }
+}
+
+function invalidateStepSession() {
+    if (stepSession) stepSession.invalidate();
+    stepSession = null;
+    stepSheet.hidden = true;
+}
+
+function updateStepsBtnState() {
+    stepsBtn.disabled = isAutoSolving || (solverSelect && solverSelect.value === 'retrace');
+}
+
+function formatStepMoves(moves, limit = 16) {
+    const names = moves.map(m => m.name);
+    if (names.length <= limit) return names.join(' ');
+    return `${names.slice(0, limit).join(' ')} … (${names.length} moves)`;
+}
+
+function stepListItem(icon, label, meta, onTap, extraClass) {
+    const li = document.createElement('li');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'step-item' + (extraClass ? ' ' + extraClass : '');
+    btn.innerHTML = `<span class="step-icon">${icon}</span><span class="step-label">${label}</span><span class="step-meta">${meta}</span>`;
+    btn.addEventListener('click', onTap);
+    li.appendChild(btn);
+    stepList.appendChild(li);
+}
+
+function renderStepSheet() {
+    if (!stepModeActive() || stepSheet.hidden) return;
+    const stages = stepSession.getStages();
+    const preview = stepSession.preview();
+    const previewByIndex = {};
+    preview.forEach(st => { previewByIndex[st.index] = st.moves; });
+    const current = stepSession.currentStep;
+
+    stepList.innerHTML = '';
+    stepListItem(current === 0 ? '▶' : '⏮', 'Start (scrambled)', '',
+        () => playStepJump(0), current === 0 ? 'step-current' : '');
+    stages.forEach(st => {
+        const icon = st.status === 'done' ? '✓' : st.status === 'current' ? '▶' : '○';
+        const moves = previewByIndex[st.index];
+        const meta = st.status === 'pending' && moves ? `${moves.length} moves` : st.status === 'pending' ? '' : '✓';
+        stepListItem(icon, `${st.index}. ${st.name}`, meta,
+            () => playStepJump(st.index), st.status === 'current' ? 'step-current' : '');
+    });
+
+    const next = current < stages.length ? current + 1 : null;
+    stepInstructions.hidden = false;
+    if (next) {
+        const nextMoves = previewByIndex[next] || [];
+        stepInstructionsTitle.textContent = `Step ${next}: ${STEP_STAGES[next - 1]}`;
+        stepInstructionsGoal.textContent = STEP_INFO[next].goal;
+        stepInstructionsAlg.textContent = `Algorithm: ${STEP_INFO[next].alg}`;
+        stepInstructionsMoves.textContent = nextMoves.length
+            ? `Your cube: ${formatStepMoves(nextMoves)}`
+            : 'Your cube: already done ✓';
+        stepPlayBtn.textContent = `▶ Solve step ${next} for me`;
+        stepPlayBtn.onclick = () => playStepJump(next);
+    } else {
+        stepInstructionsTitle.textContent = 'Cube solved! 🎉';
+        stepInstructionsGoal.textContent = 'Tap any step to rewind and practice it again.';
+        stepInstructionsAlg.textContent = '';
+        stepInstructionsMoves.textContent = '';
+        stepPlayBtn.textContent = '⏮ Back to start';
+        stepPlayBtn.onclick = () => playStepJump(0);
+    }
+}
+
+function playStepJump(target) {
+    if (isAutoSolving || rubiksCube.getIsAnimating() || rubiksCube.getAnimationQueueLength() > 0) return;
+    if (!stepModeActive()) return;
+
+    let plan;
+    try {
+        plan = stepSession.goTo(target);
+    } catch (err) {
+        console.error('Step solver failed:', err);
+        uiController.updateStatus('Step solver failed — try Reset');
+        return;
+    }
+    if (plan.moves.length === 0) {
+        renderStepSheet();
+        return;
+    }
+
+    isAutoSolving = true;
+    uiController.disableButtons();
+    updateStepsBtnState();
+
+    const labeled = [];
+    if (plan.kind === 'rewind') {
+        plan.moves.forEach(m => labeled.push({ m, label: 'Rewinding' }));
+    } else {
+        plan.stages.forEach(st => st.moves.forEach(m => labeled.push({ m, label: st.stage })));
+    }
+    const duration = plan.kind === 'rewind' ? STEP_REWIND_DURATION : SOLVE_MOVE_DURATION;
+    let i = 0;
+    const playNext = () => {
+        if (i >= labeled.length) {
+            isAutoSolving = false;
+            uiController.enableButtons();
+            updateStepsBtnState();
+            stepSheetStatus.hidden = true;
+            renderStepSheet();
+            if (target === 0) uiController.updateStatus('Back at the scramble — try step 1!');
+            else if (target === 8 && plan.kind === 'forward') uiController.updateStatus('Solved! ✨');
+            else uiController.updateStatus(`Step ${target} done — try the next one yourself!`);
+            return;
+        }
+        const { m, label } = labeled[i++];
+        stepSheetStatus.hidden = false;
+        stepSheetStatus.textContent = `${label} — ${m.name}  (${i}/${labeled.length})`;
+        rubiksCube.rotateFace(m.axis, m.layer, m.direction, false, playNext, duration);
+    };
+    playNext();
+}
+
+stepsBtn.addEventListener('click', () => {
+    if (isAutoSolving) return;
+    if (stepSheet.hidden) {
+        ensureStepSession();
+        stepSheet.hidden = false;
+        renderStepSheet();
+    } else {
+        stepSheet.hidden = true;
+    }
+});
+
+stepSheetClose.addEventListener('click', () => {
+    stepSheet.hidden = true;
+});
+
+if (solverSelect) {
+    solverSelect.addEventListener('change', () => {
+        if (solverSelect.value === 'retrace') invalidateStepSession();
+        updateStepsBtnState();
+    });
+}
+
+// The user's own turns (drags, keyboard) flow into the session so rewinds
+// undo their attempts and forward jumps re-plan around them.
+rubiksCube.onUserMove = move => {
+    if (stepModeActive() && !isAutoSolving) {
+        stepSession.recordManual(move);
+        renderStepSheet();
+    }
+};
+
+updateStepsBtnState();
+
 // Solve the cube with the selected method
 function solve() {
     if (isAutoSolving || rubiksCube.getIsAnimating() || rubiksCube.getAnimationQueueLength() > 0) return;
+
+    // In step mode, Solve means "jump to the final step" so the session
+    // stays valid and the user can still rewind afterwards.
+    if (stepModeActive() && getSelectedSolver() === solverStrategies.layered) {
+        playStepJump(8);
+        return;
+    }
 
     const solver = getSelectedSolver();
     let stages;
@@ -494,6 +688,7 @@ function solve() {
 // Reset the cube
 function reset() {
     if (rubiksCube.getIsAnimating() || rubiksCube.getAnimationQueueLength() > 0) return;
+    invalidateStepSession();
     rubiksCube.reset();
     uiController.updateStatus('Ready');
 }

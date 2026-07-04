@@ -142,9 +142,20 @@
             return w !== null && eq(w, this.frame.U);
         }
 
+        /** True when a white edge already sits correctly in the white cross. */
+        crossEdgeSolved(e) {
+            if (!eq(this.stickerDir(e, 'white'), this.frame.D)) return false;
+            const side = e.stickers.find(t => t.color !== 'white').color;
+            const letter = this.sideLetterOf(this.stickerDir(e, side));
+            return letter !== null && this.centerColor(letter) === side;
+        }
+
         // ---- Stage: Daisy (white edges around the yellow center) ----
         solveDaisy() {
             this.begin('Daisy');
+            // A finished white cross must not be popped back up into a daisy
+            // (matters when solving resumes from a partially solved cube).
+            if (this.whiteEdges().every(e => this.crossEdgeSolved(e))) return;
             let guard = 0;
             while (this.daisyCount() < 4 && guard++ < 24) {
                 const e = this.whiteEdges().find(c => !eq(this.stickerDir(c, 'white'), this.frame.U));

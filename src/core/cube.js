@@ -289,6 +289,9 @@ class RubiksCube {
 
                 if (record) {
                     this.moveHistory.push({ axis, layer, direction });
+                    if (this.onUserMove) {
+                        this.onUserMove({ axis, layer, direction });
+                    }
                 }
 
                 this.isAnimating = false;
@@ -386,6 +389,9 @@ class RubiksCube {
         this.moveHistory.push({ axis, layer, direction });
         if (this.state) {
             this.state.applyRotation(axis, layer, direction);
+        }
+        if (this.onUserMove) {
+            this.onUserMove({ axis, layer, direction });
         }
     }
 }
