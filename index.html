@@ -45,15 +45,35 @@
     <!-- <div id="ai-test-banner">This page is a test of the ability of AI to create from scratch using <a href="https://threejs.org/" target="_blank" rel="noopener noreferrer">Three.js</a></div> -->
     <div id="container"></div>
     <div id="controls">
-        <button id="scrambleBtn">Scramble</button>
-        <button id="solveBtn">Solve</button>
-        <select id="solverSelect" aria-label="Solving method">
-            <option value="layered" selected>Layered Method</option>
-            <option value="retrace">Retrace Moves</option>
-        </select>
-        <button id="resetBtn">Reset</button>
+        <div class="control-row">
+            <button id="scrambleBtn">Scramble</button>
+            <button id="solveBtn">Solve</button>
+            <button id="resetBtn">Reset</button>
+        </div>
+        <div class="control-row">
+            <select id="solverSelect" aria-label="Solving method">
+                <option value="layered" selected>Layered Method</option>
+                <option value="retrace">Retrace Moves</option>
+            </select>
+            <button id="stepsBtn">Steps</button>
+        </div>
     </div>
     <div id="solve-progress"></div>
+    <div id="step-sheet" hidden>
+        <div id="step-sheet-header">
+            <span id="step-sheet-title">Solve step by step</span>
+            <button id="step-sheet-close" aria-label="Close steps panel">✕</button>
+        </div>
+        <div id="step-sheet-status" hidden></div>
+        <ol id="step-list"></ol>
+        <div id="step-instructions" hidden>
+            <h4 id="step-instructions-title"></h4>
+            <p id="step-instructions-goal"></p>
+            <p id="step-instructions-alg"></p>
+            <p id="step-instructions-moves"></p>
+            <button id="step-play-btn"></button>
+        </div>
+    </div>
     <div id="status">Ready</div>
     <div id="front-face-indicator">
         <span>Front Face:</span>
@@ -103,6 +123,7 @@
     <script src="src/rendering/highlightManager.js"></script>
     <script src="src/controllers/touchHandler.js"></script>
     <script src="src/core/cubeState.js"></script>
+    <script src="src/core/stepSession.js"></script>
     <script src="src/core/cube.js"></script>
     <script>
         // Splash screen management

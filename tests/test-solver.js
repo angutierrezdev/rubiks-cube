@@ -179,5 +179,198 @@ console.log(`Property test: ${PROPERTY_TRIALS} random scrambles`);
     console.log(`  worst-case solution length: ${worst} moves`);
 }
 
+// ---------- StepSession engine (step-by-step solve mode) ----------
+console.log('StepSession engine');
+{
+    const { StepSession, STEP_STAGES } = require('../src/core/stepSession.js');
+    const STAGE_ORDER = ['Daisy', 'White Cross', 'White Corners', 'Middle Layer', 'Yellow Cross',
+        'Orient Yellow Corners', 'Position Yellow Corners', 'Position Yellow Edges'];
+    const serialize = st => JSON.stringify(st.cubies);
+
+    const solver = new LayeredMethodSolver();
+    const rng = mulberry32(99);
+    const start = new CubeState();
+    randomScramble(start, 20, rng);
+    const startSnap = serialize(start);
+
+    // Cycle 1 — fresh session
+    const session = new StepSession(solver, start);
+    const fresh = session.getStages();
+    check('session exposes the 8 method stages in order',
+        fresh.map(s => s.name).join('|') === STAGE_ORDER.join('|'));
+    check('exported STEP_STAGES matches method order', STEP_STAGES.join('|') === STAGE_ORDER.join('|'));
+    check('fresh session: all stages pending', fresh.every(s => s.status === 'pending'));
+    check('fresh session: current step is 0', session.currentStep === 0);
+
+    // The live mirror plays every plan, exactly as the on-screen cube would.
+    const live = start.clone();
+    const applyPlan = plan => plan.moves.forEach(m => live.applyMove(m));
+
+    // Reference states: the one-shot full solution cut at stage boundaries.
+    const refStages = solver.solve({ state: start.clone(), history: [] });
+    const refAt = n => {
+        const s = start.clone();
+        refStages.forEach(st => {
+            if (STAGE_ORDER.indexOf(st.stage) + 1 <= n) st.moves.forEach(m => s.applyMove(m));
+        });
+        return serialize(s);
+    };
+
+    // Cycle 2 — first forward jump
+    const p1 = session.goTo(1);
+    check('goTo(1) is a forward plan', p1.kind === 'forward');
+    check('goTo(1) covers exactly stage 1', p1.stages.length === 1 && p1.stages[0].index === 1);
+    applyPlan(p1);
+    check('state after goTo(1) equals reference end-of-Daisy', serialize(live) === refAt(1));
+    check('stage 1 becomes current', session.getStages()[0].status === 'current');
+    check('current step is 1', session.currentStep === 1);
+
+    // Cycle 3 — multi-stage jump
+    const p3 = session.goTo(3);
+    check('goTo(3) is a forward plan', p3.kind === 'forward');
+    check('goTo(3) covers stages 2..3', p3.stages.map(s => s.index).join(',') === '2,3');
+    applyPlan(p3);
+    check('state after goTo(3) equals reference end-of-White-Corners', serialize(live) === refAt(3));
+    const st3 = session.getStages();
+    check('stages 1-2 done, 3 current, rest pending',
+        st3[0].status === 'done' && st3[1].status === 'done' && st3[2].status === 'current' &&
+        st3.slice(3).every(s => s.status === 'pending'));
+
+    // Cycle 4 — pure rewind
+    const back1 = session.goTo(1);
+    check('goTo(1) from step 3 is a rewind plan', back1.kind === 'rewind');
+    applyPlan(back1);
+    check('rewind restores exact end-of-Daisy state', serialize(live) === refAt(1));
+    check('current step back to 1', session.currentStep === 1);
+    const same = session.goTo(1);
+    check('goTo(current step) with no changes is a no-op plan', same.kind === 'none' && same.moves.length === 0);
+    const back0 = session.goTo(0);
+    applyPlan(back0);
+    check('goTo(0) restores the original scramble exactly', serialize(live) === startSnap);
+    check('after full rewind all stages pending again',
+        session.getStages().every(s => s.status === 'pending'));
+
+    // Cycle 5 — rewind swallows the user's manual attempt
+    applyPlan(session.goTo(1));
+    randomScramble(live, 3, rng).forEach(m => session.recordManual(m));
+    const redo = session.goTo(1);
+    check('goTo(current step) after manual moves is a rewind', redo.kind === 'rewind');
+    check('rewind plan undoes exactly the manual moves', redo.moves.length === 3);
+    applyPlan(redo);
+    check('manual attempt undone: state equals end-of-Daisy again', serialize(live) === refAt(1));
+
+    // Cycle 6 — forward after manual moves recomputes from the current state
+    randomScramble(live, 4, rng).forEach(m => session.recordManual(m));
+    const p5 = session.goTo(5);
+    check('dirty forward is a forward plan', p5.kind === 'forward');
+    check('dirty forward re-plans all stages from 1', p5.stages.map(s => s.index).join(',') === '1,2,3,4,5');
+    let snapAt2 = null;
+    p5.stages.forEach(st => {
+        st.moves.forEach(m => live.applyMove(m));
+        if (st.index === 2) snapAt2 = serialize(live);
+    });
+    const oracle = solver.solve({ state: live.clone(), history: [] });
+    check('solver oracle confirms stages 1-5 complete after dirty forward',
+        oracle.every(st => STAGE_ORDER.indexOf(st.stage) + 1 > 5));
+    const back2 = session.goTo(2);
+    applyPlan(back2);
+    check('rewind lands exactly on the rewritten stage-2 checkpoint', serialize(live) === snapAt2);
+
+    // Cycle 7 — the user completes a stage entirely by hand (zero-move stage)
+    const probe = solver.solve({ state: live.clone(), history: [] });
+    const stage3Moves = (probe.find(st => st.stage === 'White Corners') || { moves: [] }).moves;
+    stage3Moves.forEach(m => { live.applyMove(m); session.recordManual(m); });
+    const p3b = session.goTo(3);
+    check('stage solved by hand: forward plan with zero moves',
+        p3b.kind === 'forward' && p3b.moves.length === 0);
+    check('hand-solved stage counts as reached', session.currentStep === 3);
+    const backAll = session.goTo(0);
+    applyPlan(backAll);
+    check('full rewind through manual play restores the scramble exactly', serialize(live) === startSnap);
+
+    // Cycle 8 — preview and the full jump (Solve button semantics)
+    const pv1 = session.preview();
+    const pv2 = session.preview();
+    check('preview covers all remaining stages', pv1.map(s => s.index).join(',') === '1,2,3,4,5,6,7,8');
+    check('preview is repeatable (does not mutate the session)', JSON.stringify(pv1) === JSON.stringify(pv2));
+    const p8 = session.goTo(8);
+    check('goTo(8) plays exactly what preview promised',
+        JSON.stringify(p8.moves) === JSON.stringify(pv1.flatMap(s => s.moves)));
+    check('full solve stays under the move ceiling', p8.moves.length <= MOVE_CEILING);
+    applyPlan(p8);
+    check('goTo(8) solves the cube', live.isSolved());
+    check('current step is 8 after full jump', session.currentStep === 8);
+    const st8 = session.getStages();
+    check('stages 1-7 done, 8 current after full jump',
+        st8.slice(0, 7).every(s => s.status === 'done') && st8[7].status === 'current');
+    check('preview at step 8 is empty', session.preview().length === 0);
+
+    // Cycle 9 — invalidation (scramble/reset kills the session)
+    session.invalidate();
+    check('dead session is not alive', session.alive === false);
+    let threw = false;
+    try { session.goTo(1); } catch (e) { threw = true; }
+    check('goTo on a dead session throws', threw);
+    let manualThrew = false;
+    try { session.recordManual({ axis: 'x', layer: 1, direction: -1 }); } catch (e) { manualThrew = true; }
+    check('recordManual on a dead session is a safe no-op', !manualThrew);
+}
+
+// ---------- StepSession property test: random step walks ----------
+const WALK_TRIALS = 100;
+console.log(`StepSession property test: ${WALK_TRIALS} random step walks`);
+{
+    const { StepSession } = require('../src/core/stepSession.js');
+    const serialize = st => JSON.stringify(st.cubies);
+    const solver = new LayeredMethodSolver();
+    let failures = 0;
+
+    for (let seed = 1; seed <= WALK_TRIALS; seed++) {
+        const rng = mulberry32(seed * 7919);
+        const live = new CubeState();
+        randomScramble(live, 15 + Math.floor(rng() * 20), rng);
+        const session = new StepSession(solver, live);
+        const snaps = { 0: serialize(live) };
+
+        try {
+            for (let op = 0; op < 10; op++) {
+                if (rng() < 0.4) {
+                    // the user fiddles with the cube by hand
+                    randomScramble(live, 1 + Math.floor(rng() * 4), rng)
+                        .forEach(m => session.recordManual(m));
+                    continue;
+                }
+                const target = Math.floor(rng() * 9); // 0..8
+                const prev = session.currentStep;
+                const plan = session.goTo(target);
+                if (plan.moves.length > MOVE_CEILING) {
+                    throw new Error(`plan of ${plan.moves.length} moves exceeds ceiling`);
+                }
+                if (plan.kind === 'forward') {
+                    plan.stages.forEach(st => {
+                        st.moves.forEach(m => live.applyMove(m));
+                        snaps[st.index] = serialize(live);
+                    });
+                } else {
+                    plan.moves.forEach(m => live.applyMove(m));
+                }
+                if (session.currentStep !== target) {
+                    throw new Error(`currentStep ${session.currentStep} after goTo(${target})`);
+                }
+                if (plan.kind === 'rewind' && serialize(live) !== snaps[target]) {
+                    throw new Error(`rewind from ${prev} to ${target} missed its checkpoint`);
+                }
+            }
+            const final = session.goTo(8);
+            final.moves.forEach(m => live.applyMove(m));
+            if (!live.isSolved()) throw new Error('walk did not end solved');
+        } catch (err) {
+            failures++;
+            console.error(`  ✗ walk seed ${seed}: ${err.message}`);
+        }
+    }
+    check(`all ${WALK_TRIALS} random step walks stay exact and end solved`, failures === 0, `${failures} failures`);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
