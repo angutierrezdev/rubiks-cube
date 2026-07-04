@@ -175,13 +175,18 @@
               right: 0;
               background: #4285f4;
               color: white;
-              padding: 12px 20px;
+              padding: calc(env(safe-area-inset-top, 0px) + 12px) calc(env(safe-area-inset-right, 0px) + 20px) 12px calc(env(safe-area-inset-left, 0px) + 20px);
               text-align: center;
               z-index: 10000;
               font-family: Arial, sans-serif;
               box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+              display: flex;
+              flex-wrap: wrap;
+              align-items: center;
+              justify-content: center;
+              gap: 10px;
             ">
-              <span style="margin-right: 15px;">🎉 A new version is available!</span>
+              <span>🎉 A new version is available!</span>
               <button id="update-now-btn" style="
                 background: white;
                 color: #4285f4;
@@ -190,7 +195,6 @@
                 border-radius: 4px;
                 cursor: pointer;
                 font-weight: bold;
-                margin-right: 10px;
               ">Update Now</button>
               <button id="update-later-btn" style="
                 background: transparent;
