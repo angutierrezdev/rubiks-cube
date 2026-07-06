@@ -568,6 +568,10 @@
             return 'Layered Method';
         }
 
+        supportsSteps() {
+            return true;
+        }
+
         solve(context) {
             if (!context.state) throw new Error('Cube state unavailable');
             if (context.state.isSolved()) return [];

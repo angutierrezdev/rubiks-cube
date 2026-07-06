@@ -407,6 +407,7 @@ function scramble() {
     uiController.disableButtons();
 
     rubiksCube.scramble(() => {
+        updateRetraceAvailability();
         uiController.updateStatus('Scrambled! Click Solve to auto-solve');
         uiController.enableButtons();
     });
@@ -425,6 +426,24 @@ let isAutoSolving = false;
 function getSelectedSolver() {
     const key = solverSelect ? solverSelect.value : 'layered';
     return solverStrategies[key] || solverStrategies.layered;
+}
+
+const retraceOption = solverSelect ? solverSelect.querySelector('option[value="retrace"]') : null;
+
+// Retrace is only honest while moveHistory still describes the path from
+// solved to the current state; unrecorded moves (step mode, interrupted
+// solves) break that, and a step rewind can restore it. Re-checked whenever
+// the cube settles, and again as a backstop when Solve is clicked.
+function updateRetraceAvailability() {
+    if (!solverSelect || !retraceOption) return;
+    const ok = solverCanRetrace(rubiksCube.state, rubiksCube.moveHistory);
+    retraceOption.disabled = !ok;
+    retraceOption.textContent = ok ? 'Retrace Moves' : 'Retrace Moves (moves not tracked)';
+    if (!ok && solverSelect.value === 'retrace') {
+        solverSelect.value = 'layered';
+        uiController.updateStatus('Move history no longer matches — switched to Layered Method');
+    }
+    updateStepsBtnState();
 }
 
 function showSolveProgress(text) {
@@ -483,7 +502,8 @@ function invalidateStepSession() {
 }
 
 function updateStepsBtnState() {
-    stepsBtn.disabled = isAutoSolving || (solverSelect && solverSelect.value === 'retrace');
+    stepsBtn.hidden = !getSelectedSolver().supportsSteps();
+    stepsBtn.disabled = isAutoSolving;
 }
 
 function formatStepMoves(moves, limit = 16) {
@@ -577,7 +597,7 @@ function playStepJump(target) {
         if (i >= labeled.length) {
             isAutoSolving = false;
             uiController.enableButtons();
-            updateStepsBtnState();
+            updateRetraceAvailability();
             stepSheetStatus.hidden = true;
             renderStepSheet();
             if (target === 0) uiController.updateStatus('Back at the scramble — try step 1!');
@@ -622,13 +642,18 @@ rubiksCube.onUserMove = move => {
         stepSession.recordManual(move);
         renderStepSheet();
     }
+    updateRetraceAvailability();
 };
 
-updateStepsBtnState();
+updateRetraceAvailability();
 
 // Solve the cube with the selected method
 function solve() {
     if (isAutoSolving || rubiksCube.getIsAnimating() || rubiksCube.getAnimationQueueLength() > 0) return;
+
+    // Backstop: never let a stale dropdown fire a retrace that can't reach
+    // solved — this re-checks and auto-switches to Layered if needed.
+    updateRetraceAvailability();
 
     // In step mode, Solve means "jump to the final step" so the session
     // stays valid and the user can still rewind afterwards.
@@ -643,7 +668,9 @@ function solve() {
         stages = solver.solve({ state: rubiksCube.state, history: rubiksCube.moveHistory });
     } catch (err) {
         console.error('Solver failed:', err);
-        uiController.updateStatus('Solver failed — try Retrace Moves or Reset');
+        uiController.updateStatus(solverCanRetrace(rubiksCube.state, rubiksCube.moveHistory)
+            ? 'Solver failed — try Retrace Moves or Reset'
+            : 'Solver failed — try Reset');
         return;
     }
 
@@ -664,6 +691,7 @@ function solve() {
             rubiksCube.moveHistory = [];
             isAutoSolving = false;
             hideSolveProgress();
+            updateRetraceAvailability();
             uiController.updateStatus('Solved! ✨');
             uiController.enableButtons();
             return;
@@ -690,6 +718,7 @@ function reset() {
     if (rubiksCube.getIsAnimating() || rubiksCube.getAnimationQueueLength() > 0) return;
     invalidateStepSession();
     rubiksCube.reset();
+    updateRetraceAvailability();
     uiController.updateStatus('Ready');
 }
 

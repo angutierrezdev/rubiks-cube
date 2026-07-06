@@ -17,6 +17,10 @@ class SolverStrategy {
     solve(context) {
         throw new Error('SolverStrategy.solve must be implemented');
     }
+
+    supportsSteps() {
+        return false;
+    }
 }
 
 /**
@@ -59,11 +63,28 @@ class RetraceSolver extends SolverStrategy {
     }
 }
 
+/**
+ * True when replaying the inverted history from the given state reaches the
+ * solved cube — i.e. the history still describes the path from solved to
+ * here. Moves applied without recording (step mode, interrupted solves)
+ * break this, and a rewind that restores the recorded state repairs it.
+ */
+function canRetrace(state, history) {
+    if (!state) return false;
+    const probe = state.clone();
+    for (let i = history.length - 1; i >= 0; i--) {
+        const m = history[i];
+        probe.applyRotation(m.axis, m.layer, -m.direction);
+    }
+    return probe.isSolved();
+}
+
 if (typeof window !== 'undefined') {
     window.SolverStrategy = SolverStrategy;
     window.RetraceSolver = RetraceSolver;
     window.solverMoveNotation = moveNotation;
+    window.solverCanRetrace = canRetrace;
 }
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { SolverStrategy, RetraceSolver, moveNotation };
+    module.exports = { SolverStrategy, RetraceSolver, moveNotation, canRetrace };
 }

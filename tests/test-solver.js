@@ -3,7 +3,7 @@
 // Exits non-zero on any failure so it can gate CI/deploys.
 
 const { CubeState } = require('../src/core/cubeState.js');
-const { RetraceSolver, SolverStrategy } = require('../src/strategies/solverStrategy.js');
+const { RetraceSolver, SolverStrategy, canRetrace } = require('../src/strategies/solverStrategy.js');
 const { LayeredMethodSolver } = require('../src/strategies/layeredMethodSolver.js');
 
 const MOVE_CEILING = 300;          // no single solution may exceed this
@@ -97,6 +97,35 @@ console.log('RetraceSolver');
     check('retracing recorded history solves the cube', done.isSolved());
     check('retrace emits one stage', stages.length === 1);
     check('retrace move count equals history length', stages[0].moves.length === 30);
+}
+
+// ---------- canRetrace guard ----------
+console.log('canRetrace guard');
+{
+    // Intact history: every applied move was recorded
+    const rng = mulberry32(11);
+    const s = new CubeState();
+    const history = randomScramble(s, 25, rng);
+    check('intact history is retraceable', canRetrace(s, history));
+
+    // Divergence: moves applied without recording (step-mode playback)
+    const unrecorded = randomScramble(s, 5, rng);
+    check('unrecorded moves break retraceability', !canRetrace(s, history));
+
+    // Re-validation: undoing the unrecorded moves (step-mode rewind) repairs it
+    [...unrecorded].reverse().forEach(m => s.applyRotation(m.axis, m.layer, -m.direction));
+    check('rewinding unrecorded moves restores retraceability', canRetrace(s, history));
+
+    // Empty history is consistent only with a solved cube
+    check('empty history on a solved cube is retraceable', canRetrace(new CubeState(), []));
+    const wiped = new CubeState();
+    randomScramble(wiped, 10, rng);
+    check('empty history on a scrambled cube is not retraceable', !canRetrace(wiped, []));
+
+    // Step-mode capability flags drive the Steps button
+    check('base strategy does not support steps', !new SolverStrategy().supportsSteps());
+    check('RetraceSolver does not support steps', !new RetraceSolver().supportsSteps());
+    check('LayeredMethodSolver supports steps', new LayeredMethodSolver().supportsSteps());
 }
 
 // ---------- LayeredMethodSolver unit cases ----------
