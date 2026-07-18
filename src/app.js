@@ -423,6 +423,30 @@ const solverSelect = document.getElementById('solverSelect');
 const solveProgressEl = document.getElementById('solve-progress');
 let isAutoSolving = false;
 
+// ---- Solve speed slider ----
+// Slider is linear (-2..2) representing log2(multiplier), so dragging feels
+// evenly-paced across the 0.25x-4x range instead of bunching up near 1x.
+const SPEED_STORAGE_KEY = 'cubeSolveSpeed';
+const speedSlider = document.getElementById('speedSlider');
+const speedReadout = document.getElementById('speed-readout');
+
+function applySpeedMultiplier(multiplier) {
+    rubiksCube.setSpeedMultiplier(multiplier);
+    if (speedReadout) speedReadout.textContent = `${multiplier.toFixed(1)}x`;
+}
+
+if (speedSlider) {
+    const savedMultiplier = Math.min(4, Math.max(0.25, parseFloat(localStorage.getItem(SPEED_STORAGE_KEY)) || 1));
+    speedSlider.value = Math.log2(savedMultiplier);
+    applySpeedMultiplier(savedMultiplier);
+
+    speedSlider.addEventListener('input', () => {
+        const multiplier = Math.pow(2, parseFloat(speedSlider.value));
+        applySpeedMultiplier(multiplier);
+        localStorage.setItem(SPEED_STORAGE_KEY, multiplier);
+    });
+}
+
 function getSelectedSolver() {
     const key = solverSelect ? solverSelect.value : 'layered';
     return solverStrategies[key] || solverStrategies.layered;
@@ -608,7 +632,7 @@ function playStepJump(target) {
         const { m, label } = labeled[i++];
         stepSheetStatus.hidden = false;
         stepSheetStatus.textContent = `${label} — ${m.name}  (${i}/${labeled.length})`;
-        rubiksCube.rotateFace(m.axis, m.layer, m.direction, false, playNext, duration);
+        rubiksCube.rotateFace(m.axis, m.layer, m.direction, false, playNext, duration, true);
     };
     playNext();
 }
@@ -706,7 +730,7 @@ function solve() {
             played++;
             showSolveProgress(`${stage.stage} — ${move.name}  (${played}/${totalMoves})`);
             rubiksCube.rotateFace(move.axis, move.layer, move.direction, false,
-                () => playMove(moveIndex + 1), SOLVE_MOVE_DURATION);
+                () => playMove(moveIndex + 1), SOLVE_MOVE_DURATION, true);
         };
         playMove(0);
     };

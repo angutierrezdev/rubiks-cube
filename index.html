@@ -74,7 +74,15 @@
             <button id="step-play-btn"></button>
         </div>
     </div>
-    <div id="status">Ready</div>
+    <div id="status-panel">
+        <div id="status">Ready</div>
+        <div id="speed-row">
+            <span id="speed-slow-icon" aria-hidden="true">🐢</span>
+            <input type="range" id="speedSlider" min="-2" max="2" step="0.01" value="0" aria-label="Solve speed">
+            <span id="speed-fast-icon" aria-hidden="true">🐇</span>
+            <span id="speed-readout">1.0x</span>
+        </div>
+    </div>
     <div id="front-face-indicator">
         <span>Front Face:</span>
         <div id="front-face-color"></div>

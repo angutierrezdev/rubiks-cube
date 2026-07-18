@@ -291,7 +291,7 @@ button:disabled {
 }
 #solve-progress {
     position: fixed;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 62px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 110px);
     left: calc(env(safe-area-inset-left, 0px) + 20px);
     display: none;
     color: white;
@@ -302,15 +302,45 @@ button:disabled {
     border-radius: 8px;
     z-index: 100;
 }
-#status {
+#status-panel {
     position: fixed;
     bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
     left: calc(env(safe-area-inset-left, 0px) + 20px);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+#status {
     color: white;
     font-size: 14px;
     background: rgba(0, 0, 0, 0.5);
     padding: 10px 15px;
     border-radius: 8px;
+}
+#speed-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: white;
+    font-size: 14px;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 8px 15px;
+    border-radius: 8px;
+}
+#speed-row span[id$="-icon"] {
+    font-size: 16px;
+    line-height: 1;
+}
+#speedSlider {
+    width: 120px;
+    accent-color: #4ecdc4;
+    cursor: pointer;
+}
+#speed-readout {
+    font-weight: bold;
+    font-variant-numeric: tabular-nums;
+    min-width: 34px;
 }
 #instructions {
     position: fixed;
@@ -340,7 +370,7 @@ button:disabled {
 /* Front face indicator */
 #front-face-indicator {
     position: fixed;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 60px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 108px);
     left: calc(env(safe-area-inset-left, 0px) + 20px);
     color: white;
     font-size: 14px;
@@ -506,15 +536,28 @@ button:disabled {
         min-width: 0;
     }
     
-    #status {
+    #status-panel {
         bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
         left: calc(env(safe-area-inset-left, 0px) + 10px);
+        gap: 6px;
+    }
+
+    #status {
         font-size: 12px;
         padding: 8px 12px;
     }
+
+    #speed-row {
+        font-size: 12px;
+        padding: 6px 12px;
+    }
+
+    #speedSlider {
+        width: 100px;
+    }
     
     #front-face-indicator {
-        bottom: calc(env(safe-area-inset-bottom, 0px) + 45px);
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 80px);
         left: calc(env(safe-area-inset-left, 0px) + 10px);
         font-size: 12px;
         padding: 8px 12px;
@@ -529,7 +572,7 @@ button:disabled {
     }
 
     #solve-progress {
-        bottom: calc(env(safe-area-inset-bottom, 0px) + 80px);
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 115px);
         left: calc(env(safe-area-inset-left, 0px) + 10px);
         font-size: 12px;
         padding: 8px 12px;
@@ -561,7 +604,11 @@ button:disabled {
         font-size: 13px;
     }
     
-    #status, #front-face-indicator {
+    #status, #front-face-indicator, #speed-row {
         font-size: 11px;
+    }
+
+    #speedSlider {
+        width: 80px;
     }
 }
