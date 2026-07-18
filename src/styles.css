@@ -291,7 +291,7 @@ button:disabled {
 }
 #solve-progress {
     position: fixed;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 110px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 154px);
     left: calc(env(safe-area-inset-left, 0px) + 20px);
     display: none;
     color: white;
@@ -318,7 +318,7 @@ button:disabled {
     padding: 10px 15px;
     border-radius: 8px;
 }
-#speed-row {
+.slider-row {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -328,19 +328,22 @@ button:disabled {
     padding: 8px 15px;
     border-radius: 8px;
 }
-#speed-row span[id$="-icon"] {
+.slider-row span[id$="-icon"] {
     font-size: 16px;
     line-height: 1;
 }
-#speedSlider {
+.slider-row input[type="range"] {
     width: 120px;
     accent-color: #4ecdc4;
     cursor: pointer;
 }
-#speed-readout {
+.slider-row .readout {
     font-weight: bold;
     font-variant-numeric: tabular-nums;
     min-width: 34px;
+}
+#zoom-readout {
+    min-width: 74px;
 }
 #instructions {
     position: fixed;
@@ -370,7 +373,7 @@ button:disabled {
 /* Front face indicator */
 #front-face-indicator {
     position: fixed;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 108px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 152px);
     left: calc(env(safe-area-inset-left, 0px) + 20px);
     color: white;
     font-size: 14px;
@@ -547,17 +550,17 @@ button:disabled {
         padding: 8px 12px;
     }
 
-    #speed-row {
+    .slider-row {
         font-size: 12px;
         padding: 6px 12px;
     }
 
-    #speedSlider {
+    .slider-row input[type="range"] {
         width: 100px;
     }
-    
+
     #front-face-indicator {
-        bottom: calc(env(safe-area-inset-bottom, 0px) + 80px);
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 118px);
         left: calc(env(safe-area-inset-left, 0px) + 10px);
         font-size: 12px;
         padding: 8px 12px;
@@ -572,7 +575,7 @@ button:disabled {
     }
 
     #solve-progress {
-        bottom: calc(env(safe-area-inset-bottom, 0px) + 115px);
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 153px);
         left: calc(env(safe-area-inset-left, 0px) + 10px);
         font-size: 12px;
         padding: 8px 12px;
@@ -604,11 +607,11 @@ button:disabled {
         font-size: 13px;
     }
     
-    #status, #front-face-indicator, #speed-row {
+    #status, #front-face-indicator, .slider-row {
         font-size: 11px;
     }
 
-    #speedSlider {
+    .slider-row input[type="range"] {
         width: 80px;
     }
 }
