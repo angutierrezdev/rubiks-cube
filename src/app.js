@@ -447,6 +447,35 @@ if (speedSlider) {
     });
 }
 
+// ---- Zoom slider ----
+// Slider value and camera distance share the same [ZOOM_MIN, ZOOM_MAX] range but
+// are mirrored (value = ZOOM_MIN + ZOOM_MAX - distance) so left=zoomed-out/right=zoomed-in,
+// while native range rendering keeps min on the left. The mapping is self-inverse,
+// so the same formula converts both directions.
+const ZOOM_STORAGE_KEY = 'cubeZoomDistance';
+const ZOOM_MIN = 5;
+const ZOOM_MAX = 20;
+const DEFAULT_ZOOM_DISTANCE = camera.position.length();
+const zoomSlider = document.getElementById('zoomSlider');
+const zoomReadout = document.getElementById('zoom-readout');
+
+function setZoomDistance(distance, fromSlider) {
+    const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, distance));
+    camera.position.normalize().multiplyScalar(clamped);
+    if (zoomReadout) zoomReadout.textContent = `Zoom: ${Math.round(DEFAULT_ZOOM_DISTANCE / clamped * 100)}%`;
+    if (!fromSlider && zoomSlider) zoomSlider.value = ZOOM_MIN + ZOOM_MAX - clamped;
+    localStorage.setItem(ZOOM_STORAGE_KEY, clamped);
+}
+
+if (zoomSlider) {
+    const savedDistance = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, parseFloat(localStorage.getItem(ZOOM_STORAGE_KEY)) || DEFAULT_ZOOM_DISTANCE));
+    setZoomDistance(savedDistance, false);
+
+    zoomSlider.addEventListener('input', () => {
+        setZoomDistance(ZOOM_MIN + ZOOM_MAX - parseFloat(zoomSlider.value), true);
+    });
+}
+
 function getSelectedSolver() {
     const key = solverSelect ? solverSelect.value : 'layered';
     return solverStrategies[key] || solverStrategies.layered;
@@ -2035,14 +2064,9 @@ container.addEventListener('touchmove', (e) => {
                 // Standard pinch behavior: pinch out (scale > 1) = zoom in, pinch in (scale < 1) = zoom out
                 // In Three.js, smaller camera.position = closer = zoom in, larger = farther = zoom out
                 const zoomFactor = scale > 1 ? 0.95 : 1.05;
-                
-                camera.position.multiplyScalar(zoomFactor);
-                
-                // Clamp zoom to match wheel zoom limits
-                const dist = camera.position.length();
-                if (dist < 5) camera.position.normalize().multiplyScalar(5);
-                if (dist > 20) camera.position.normalize().multiplyScalar(20);
-                
+                const candidateDistance = camera.position.length() * zoomFactor;
+                setZoomDistance(candidateDistance, false);
+
                 // Update initial distance for next frame
                 touchState.initialPinchDistance = currentDistance;
             }
@@ -2325,11 +2349,8 @@ container.addEventListener('touchend', (e) => {
 // Zoom with scroll
 container.addEventListener('wheel', (e) => {
     e.preventDefault();
-    camera.position.multiplyScalar(e.deltaY > 0 ? 1.05 : 0.95);
-    // Clamp zoom
-    const dist = camera.position.length();
-    if (dist < 5) camera.position.normalize().multiplyScalar(5);
-    if (dist > 20) camera.position.normalize().multiplyScalar(20);
+    const candidateDistance = camera.position.length() * (e.deltaY > 0 ? 1.05 : 0.95);
+    setZoomDistance(candidateDistance, false);
 }, { passive: false });
 
 // Handle window resize
