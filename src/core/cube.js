@@ -47,6 +47,15 @@ class RubiksCube {
         this.isAnimating = false;
         this.animationQueue = [];
         this.state = typeof CubeState !== 'undefined' ? new CubeState() : null;
+        this.speedMultiplier = 1;
+    }
+
+    /**
+     * Set the live speed multiplier used by moves flagged `adjustable` in
+     * rotateFace. Clamped to the slider's supported range (0.25x-4x).
+     */
+    setSpeedMultiplier(multiplier) {
+        this.speedMultiplier = Math.min(4, Math.max(0.25, multiplier));
     }
 
     /**
@@ -222,9 +231,9 @@ class RubiksCube {
     /**
      * Rotate a face
      */
-    rotateFace(axis, layer, direction, record = true, callback = null, duration = 200) {
+    rotateFace(axis, layer, direction, record = true, callback = null, duration = 200, adjustable = false) {
         if (this.isAnimating) {
-            this.animationQueue.push({ axis, layer, direction, record, callback, duration });
+            this.animationQueue.push({ axis, layer, direction, record, callback, duration, adjustable });
             return;
         }
 
@@ -242,11 +251,14 @@ class RubiksCube {
         });
 
         const angle = direction * Math.PI / 2;
-        const startTime = Date.now();
+        let progress = 0;
+        let lastFrameTime = Date.now();
 
         const animate = () => {
-            const elapsed = Date.now() - startTime;
-            const progress = Math.min(elapsed / duration, 1);
+            const now = Date.now();
+            const effectiveDuration = adjustable ? duration / this.speedMultiplier : duration;
+            progress = Math.min(progress + (now - lastFrameTime) / effectiveDuration, 1);
+            lastFrameTime = now;
             const eased = 1 - Math.pow(1 - progress, 3);
             const currentAngle = angle * eased;
             
@@ -302,7 +314,7 @@ class RubiksCube {
 
                 if (this.animationQueue.length > 0) {
                     const next = this.animationQueue.shift();
-                    this.rotateFace(next.axis, next.layer, next.direction, next.record, next.callback, next.duration);
+                    this.rotateFace(next.axis, next.layer, next.direction, next.record, next.callback, next.duration, next.adjustable);
                 }
             }
         };
