@@ -30,6 +30,9 @@ jobs:
       - name: Run solver tests
         run: node tests/test-solver.js
 
+      - name: Run arcball rotation tests
+        run: node tests/test-arcball.js
+
       - name: Install minification tools
         run: npm install -g uglify-js clean-css-cli
 
@@ -50,9 +53,8 @@ jobs:
           uglifyjs src/strategies/layeredMethodSolver.js -o dist/src/strategies/layeredMethodSolver.js --compress --mangle
           uglifyjs src/strategies/cfopMethodSolver.js -o dist/src/strategies/cfopMethodSolver.js --compress --mangle
           uglifyjs src/controllers/uiController.js -o dist/src/controllers/uiController.js --compress --mangle
-          uglifyjs src/controllers/cameraController.js -o dist/src/controllers/cameraController.js --compress --mangle
+          uglifyjs src/controllers/arcballRotation.js -o dist/src/controllers/arcballRotation.js --compress --mangle
           uglifyjs src/rendering/highlightManager.js -o dist/src/rendering/highlightManager.js --compress --mangle
-          uglifyjs src/controllers/touchHandler.js -o dist/src/controllers/touchHandler.js --compress --mangle
           uglifyjs src/app.js -o dist/src/app.js --compress --mangle
 
       - name: Minify CSS
