@@ -432,6 +432,7 @@ const speedReadout = document.getElementById('speed-readout');
 function applySpeedMultiplier(multiplier) {
     rubiksCube.setSpeedMultiplier(multiplier);
     if (speedReadout) speedReadout.textContent = `${multiplier.toFixed(1)}x`;
+    if (speedSlider) speedSlider.setAttribute('aria-valuetext', `${multiplier.toFixed(1)} times speed`);
 }
 
 if (speedSlider) {
@@ -461,7 +462,9 @@ const zoomReadout = document.getElementById('zoom-readout');
 function setZoomDistance(distance, fromSlider) {
     const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, distance));
     camera.position.normalize().multiplyScalar(clamped);
-    if (zoomReadout) zoomReadout.textContent = `Zoom: ${Math.round(DEFAULT_ZOOM_DISTANCE / clamped * 100)}%`;
+    const zoomPercent = Math.round(DEFAULT_ZOOM_DISTANCE / clamped * 100);
+    if (zoomReadout) zoomReadout.textContent = `Zoom: ${zoomPercent}%`;
+    if (zoomSlider) zoomSlider.setAttribute('aria-valuetext', `${zoomPercent} percent zoom`);
     if (!fromSlider && zoomSlider) zoomSlider.value = ZOOM_MIN + ZOOM_MAX - clamped;
     localStorage.setItem(ZOOM_STORAGE_KEY, clamped);
 }
@@ -505,6 +508,9 @@ const stepList = document.getElementById('step-list');
 const stepInstructions = document.getElementById('step-instructions');
 const stepInstructionsTitle = document.getElementById('step-instructions-title');
 const stepInstructionsGoal = document.getElementById('step-instructions-goal');
+const stepInstructionsFront = document.getElementById('step-instructions-front');
+const stepFrontSwatch = document.getElementById('step-front-swatch');
+const stepFrontText = document.getElementById('step-front-text');
 const stepInstructionsAlg = document.getElementById('step-instructions-alg');
 const stepInstructionsMoves = document.getElementById('step-instructions-moves');
 const stepPlayBtn = document.getElementById('step-play-btn');
@@ -574,6 +580,7 @@ function renderStepSheet() {
         const def = stepSession.getStageDefinition(next);
         stepInstructionsTitle.textContent = `Step ${next}: ${def.name}`;
         stepInstructionsGoal.textContent = def.goal;
+        updateStepFrontIndicator();
         stepInstructionsAlg.textContent = `Algorithm: ${def.algorithm}`;
         stepInstructionsMoves.textContent = nextMoves.length
             ? `Your cube: ${formatStepMoves(nextMoves)}`
@@ -583,11 +590,26 @@ function renderStepSheet() {
     } else {
         stepInstructionsTitle.textContent = 'Cube solved! 🎉';
         stepInstructionsGoal.textContent = 'Tap any step to rewind and practice it again.';
+        stepInstructionsFront.hidden = true;
         stepInstructionsAlg.textContent = '';
         stepInstructionsMoves.textContent = '';
         stepPlayBtn.textContent = '⏮ Back to start';
         stepPlayBtn.onclick = () => playStepJump(0);
     }
+}
+
+// The move letters (R, U, F…) are relative to the solver's frame: white face
+// down and one side color as Front. Show that color so the user can turn the
+// cube to match before following along.
+function updateStepFrontIndicator() {
+    const color = SolverEngineBase.frontCenterColor(stepSession.currentState());
+    if (!color || !FACE_COLORS[color]) {
+        stepInstructionsFront.hidden = true;
+        return;
+    }
+    stepInstructionsFront.hidden = false;
+    stepFrontSwatch.style.backgroundColor = FACE_COLORS[color].hex;
+    stepFrontText.textContent = `${FACE_COLORS[color].name} — turn the cube so ${color} faces you`;
 }
 
 function playStepJump(target) {

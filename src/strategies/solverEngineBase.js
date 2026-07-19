@@ -24,6 +24,22 @@
     const SIDE_LETTERS = ['F', 'R', 'B', 'L'];
 
     class SolverEngineBase {
+        /**
+         * Color of the side center a solver built from this state treats as
+         * Front — the same pick buildFrame() makes. Lets the UI tell the user
+         * which face the solution's move letters are relative to.
+         */
+        static frontCenterColor(state) {
+            const d = state.findCenter('white');
+            if (!d) return null;
+            const D = vec(d.x, d.y, d.z);
+            const sideCenter = state.cubies.find(c =>
+                c.stickers.length === 1 &&
+                dot(vec(c.x, c.y, c.z), D) === 0
+            );
+            return sideCenter ? sideCenter.stickers[0].color : null;
+        }
+
         constructor(state) {
             this.s = state;
             this.stages = [];

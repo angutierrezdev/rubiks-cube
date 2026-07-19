@@ -71,6 +71,11 @@ class StepSession {
         return this.stageDefs[index - 1] || null;
     }
 
+    /** Read-only view of the tracked cube state (do not mutate). */
+    currentState() {
+        return this.shadow;
+    }
+
     get stageCount() {
         return this.stageNames.length;
     }
