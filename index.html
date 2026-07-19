@@ -58,24 +58,25 @@
             <button id="stepsBtn">Steps</button>
         </div>
     </div>
-    <div id="solve-progress"></div>
+    <div id="solve-progress" role="status" aria-live="polite"></div>
     <div id="step-sheet" hidden>
         <div id="step-sheet-header">
             <span id="step-sheet-title">Solve step by step</span>
             <button id="step-sheet-close" aria-label="Close steps panel">✕</button>
         </div>
-        <div id="step-sheet-status" hidden></div>
+        <div id="step-sheet-status" role="status" aria-live="polite" hidden></div>
         <ol id="step-list"></ol>
         <div id="step-instructions" hidden>
             <h4 id="step-instructions-title"></h4>
             <p id="step-instructions-goal"></p>
+            <p id="step-instructions-front">Front: <span id="step-front-swatch" aria-hidden="true"></span> <span id="step-front-text"></span></p>
             <p id="step-instructions-alg"></p>
             <p id="step-instructions-moves"></p>
             <button id="step-play-btn"></button>
         </div>
     </div>
     <div id="status-panel">
-        <div id="status">Ready</div>
+        <div id="status" role="status" aria-live="polite">Ready</div>
         <div id="speed-row" class="slider-row">
             <span id="speed-slow-icon" aria-hidden="true">🐢</span>
             <input type="range" id="speedSlider" min="-2" max="2" step="0.01" value="0" aria-label="Solve speed">
