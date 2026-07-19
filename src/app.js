@@ -3,9 +3,8 @@
 //
 // This file integrates all SOLID-principle modules:
 // - UIController (SRP) - UI management
-// - CameraController (SRP) - Camera controls
+// - ArcballRotation (SRP) - whole-cube orbit rotation math
 // - HighlightManager (SRP) - Visual feedback
-// - TouchHandler (SRP) - Gesture handling
 // - RotationStrategy (OCP) - Extensible rotation logic
 // - CubeRenderer (DIP) - Rendering abstraction
 //
@@ -242,19 +241,31 @@ const rubiksCube = new RubiksCube(cubeGroup);
 // HighlightManager - SRP: manages visual feedback
 const highlightManager = new HighlightManager();
 
-// CameraController - SRP: manages camera and view controls
-const cameraController = new CameraController(camera, cubeGroup, container);
-
 // Touch rotation constants
 const CENTER_CUBIE_THRESHOLD = 0.01;
 const TANGENT_ALIGNMENT_THRESHOLD = 0.1;
 const TOUCH_ROTATION_SCALE = 2.0;
 const MIN_SWIPE_THRESHOLD = 1;
-const CUBE_ROTATION_SPEED = 0.01;
 
-// Reusable objects for cube rotation to avoid creating new objects on every move
-const tempQuaternion = new THREE.Quaternion();
-const tempEuler = new THREE.Euler();
+// Reusable object for cube orbit rotation to avoid creating new objects on every move
+const arcballDeltaQuaternion = new THREE.Quaternion();
+
+// Get the current arcball drag center/radius from the container's on-screen size
+function getArcballGeometry() {
+    const rect = container.getBoundingClientRect();
+    return {
+        center: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+        radius: ArcballRotation.getArcballRadius(rect.width, rect.height)
+    };
+}
+
+// Apply an arcball drag step to the cube's orientation
+function applyArcballDrag(prevPos, currPos) {
+    const { center, radius } = getArcballGeometry();
+    const delta = ArcballRotation.computeArcballDelta(prevPos, currPos, center, radius);
+    arcballDeltaQuaternion.set(delta.x, delta.y, delta.z, delta.w);
+    cubeGroup.quaternion.multiplyQuaternions(arcballDeltaQuaternion, cubeGroup.quaternion);
+}
 
 /**
  * Gets cubie type and neighbor faces for special corner rotation behavior.
@@ -1314,24 +1325,9 @@ container.addEventListener('mousemove', (e) => {
     
     // Normal cube rotation
     if (!isDragging) return;
-    
-    const deltaX = e.clientX - previousMousePosition.x;
-    const deltaY = e.clientY - previousMousePosition.y;
-    
-    // Use quaternion-based rotation for consistent rotation direction
-    tempEuler.set(
-        deltaY * CUBE_ROTATION_SPEED,
-        deltaX * CUBE_ROTATION_SPEED,
-        0,
-        'XYZ'
-    );
-    tempQuaternion.setFromEuler(tempEuler);
-    
-    cubeGroup.quaternion.multiplyQuaternions(
-        tempQuaternion,
-        cubeGroup.quaternion
-    );
-    
+
+    applyArcballDrag(previousMousePosition, { x: e.clientX, y: e.clientY });
+
     previousMousePosition = { x: e.clientX, y: e.clientY };
 });
 
@@ -2029,23 +2025,8 @@ container.addEventListener('touchmove', (e) => {
     if (e.touches.length === 1 && !touchState.isLocked) {
         // Single touch rotation (normal mode)
         if (isDragging) {
-            const deltaX = e.touches[0].clientX - previousMousePosition.x;
-            const deltaY = e.touches[0].clientY - previousMousePosition.y;
-            
-            // Use quaternion-based rotation for consistent rotation direction
-            tempEuler.set(
-                deltaY * CUBE_ROTATION_SPEED,
-                deltaX * CUBE_ROTATION_SPEED,
-                0,
-                'XYZ'
-            );
-            tempQuaternion.setFromEuler(tempEuler);
-            
-            cubeGroup.quaternion.multiplyQuaternions(
-                tempQuaternion,
-                cubeGroup.quaternion
-            );
-            
+            applyArcballDrag(previousMousePosition, { x: e.touches[0].clientX, y: e.touches[0].clientY });
+
             previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
             updateFrontFaceIndicator();
         }
@@ -2376,9 +2357,11 @@ const FACE_COLORS = {
     'green': { hex: '#00ff00', name: 'Green' }
 };
 
-// Helper to get inverse quaternion from cube rotation  
+// Helper to get inverse quaternion from cube rotation
 function getCubeInverseQuaternion() {
-    return cameraController.getCubeInverseQuaternion();
+    const cubeQuaternion = new THREE.Quaternion();
+    cubeGroup.getWorldQuaternion(cubeQuaternion);
+    return cubeQuaternion.invert();
 }
 
 // Helper to determine which face a transformed vector points to
@@ -2410,15 +2393,9 @@ function updateFrontFaceIndicator() {
     uiController.updateFrontFaceIndicator(faceInfo);
 }
 
-// Call update on mouse/touch movements
+// Call update on mouse movements (touch already updates inline in its own handler)
 container.addEventListener('mousemove', () => {
-    if (cameraController.getIsDragging()) {
-        updateFrontFaceIndicator();
-    }
-});
-
-container.addEventListener('touchmove', () => {
-    if (cameraController.getIsDragging()) {
+    if (isDragging) {
         updateFrontFaceIndicator();
     }
 });
