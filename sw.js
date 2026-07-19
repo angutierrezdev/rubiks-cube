@@ -1,4 +1,4 @@
-const VERSION = '1.5.0';
+const VERSION = '1.6.2';
 const CACHE_NAME = `rubiks-cube-v${VERSION}`;
 // Derive base path from SW location (e.g. '' for user site, '/rubiks-cube' for project site)
 const BASE = self.location.pathname.replace(/\/sw\.js$/i, '') || '';
@@ -15,7 +15,10 @@ const urlsToCache = [
   BASE + '/src/rendering/highlightManager.js',
   BASE + '/src/strategies/rotationStrategy.js',
   BASE + '/src/strategies/solverStrategy.js',
+  BASE + '/src/strategies/solverEngineBase.js',
+  BASE + '/src/strategies/sharedStages.js',
   BASE + '/src/strategies/layeredMethodSolver.js',
+  BASE + '/src/strategies/cfopMethodSolver.js',
   BASE + '/src/controllers/uiController.js',
   BASE + '/src/controllers/cameraController.js',
   BASE + '/src/controllers/touchHandler.js',

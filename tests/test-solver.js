@@ -3,10 +3,12 @@
 // Exits non-zero on any failure so it can gate CI/deploys.
 
 const { CubeState } = require('../src/core/cubeState.js');
-const { RetraceSolver, SolverStrategy, canRetrace } = require('../src/strategies/solverStrategy.js');
+const { SolverStrategy } = require('../src/strategies/solverStrategy.js');
 const { LayeredMethodSolver } = require('../src/strategies/layeredMethodSolver.js');
+const { CFOPMethodSolver } = require('../src/strategies/cfopMethodSolver.js');
 
-const MOVE_CEILING = 300;          // no single solution may exceed this
+const MOVE_CEILING = 300;          // no single layered solution may exceed this
+const CFOP_MOVE_CEILING = 260;     // CFOP pairs pieces, so its worst case is tighter
 const PROPERTY_TRIALS = 500;
 
 let passed = 0;
@@ -82,50 +84,30 @@ console.log('CubeState model');
     check('inverse scramble restores solved', sc.isSolved());
 }
 
-// ---------- RetraceSolver ----------
-console.log('RetraceSolver');
+// ---------- SolverStrategy capability contract ----------
+console.log('SolverStrategy capability contract');
 {
-    const solver = new RetraceSolver();
-    check('is a SolverStrategy', solver instanceof SolverStrategy);
-    check('empty history yields no stages', solver.solve({ state: new CubeState(), history: [] }).length === 0);
-
-    const rng = mulberry32(7);
-    const s = new CubeState();
-    const history = randomScramble(s, 30, rng);
-    const stages = solver.solve({ state: s, history });
-    const { state: done } = applySolution(s, stages);
-    check('retracing recorded history solves the cube', done.isSolved());
-    check('retrace emits one stage', stages.length === 1);
-    check('retrace move count equals history length', stages[0].moves.length === 30);
-}
-
-// ---------- canRetrace guard ----------
-console.log('canRetrace guard');
-{
-    // Intact history: every applied move was recorded
-    const rng = mulberry32(11);
-    const s = new CubeState();
-    const history = randomScramble(s, 25, rng);
-    check('intact history is retraceable', canRetrace(s, history));
-
-    // Divergence: moves applied without recording (step-mode playback)
-    const unrecorded = randomScramble(s, 5, rng);
-    check('unrecorded moves break retraceability', !canRetrace(s, history));
-
-    // Re-validation: undoing the unrecorded moves (step-mode rewind) repairs it
-    [...unrecorded].reverse().forEach(m => s.applyRotation(m.axis, m.layer, -m.direction));
-    check('rewinding unrecorded moves restores retraceability', canRetrace(s, history));
-
-    // Empty history is consistent only with a solved cube
-    check('empty history on a solved cube is retraceable', canRetrace(new CubeState(), []));
-    const wiped = new CubeState();
-    randomScramble(wiped, 10, rng);
-    check('empty history on a scrambled cube is not retraceable', !canRetrace(wiped, []));
-
     // Step-mode capability flags drive the Steps button
     check('base strategy does not support steps', !new SolverStrategy().supportsSteps());
-    check('RetraceSolver does not support steps', !new RetraceSolver().supportsSteps());
+    check('base strategy has no stage definitions', new SolverStrategy().getStageDefinitions().length === 0);
     check('LayeredMethodSolver supports steps', new LayeredMethodSolver().supportsSteps());
+    check('CFOPMethodSolver supports steps', new CFOPMethodSolver().supportsSteps());
+
+    // Emitted stage names must be an in-order subsequence of the definitions,
+    // otherwise StepSession.forwardTo() throws at runtime.
+    const rng = mulberry32(4321);
+    for (const solver of [new LayeredMethodSolver(), new CFOPMethodSolver()]) {
+        const names = solver.getStageDefinitions().map(d => d.name);
+        check(`${solver.getName()}: definitions carry goal and algorithm text`,
+            solver.getStageDefinitions().every(d => d.goal && d.algorithm));
+        const s = new CubeState();
+        randomScramble(s, 25, rng);
+        const stages = solver.solve({ state: s, history: [] });
+        const indices = stages.map(st => names.indexOf(st.stage));
+        check(`${solver.getName()}: emitted stages are defined`, indices.every(i => i >= 0));
+        check(`${solver.getName()}: emitted stages follow definition order`,
+            indices.every((v, i, a) => i === 0 || v > a[i - 1]));
+    }
 }
 
 // ---------- LayeredMethodSolver unit cases ----------
@@ -178,10 +160,44 @@ console.log('LayeredMethodSolver unit cases');
     check('stages appear in method order', indices.every((v, i, a) => i === 0 || v > a[i - 1]));
 }
 
-// ---------- Property test ----------
-console.log(`Property test: ${PROPERTY_TRIALS} random scrambles`);
+// ---------- CFOPMethodSolver unit cases ----------
+console.log('CFOPMethodSolver unit cases');
 {
-    const solver = new LayeredMethodSolver();
+    const solver = new CFOPMethodSolver();
+
+    check('solved cube yields empty solution', solver.solve({ state: new CubeState(), history: [] }).length === 0);
+
+    const single = new CubeState();
+    single.applyRotation('x', 1, -1);
+    check('single R scramble is solved', applySolution(single, solver.solve({ state: single, history: [] })).state.isSolved());
+
+    // Slice-only scramble (centers displaced) — solver must be center-relative
+    const slices = new CubeState();
+    slices.applyRotation('y', 0, 1);
+    slices.applyRotation('x', 0, -1);
+    slices.applyRotation('z', 0, 1);
+    check('slice-only scramble (moved centers) is solved', applySolution(slices, solver.solve({ state: slices, history: [] })).state.isSolved());
+
+    const checker = new CubeState();
+    ['x', 'y', 'z'].forEach(axis => { checker.applyRotation(axis, 0, 1); checker.applyRotation(axis, 0, 1); });
+    check('checkerboard pattern is solved', applySolution(checker, solver.solve({ state: checker, history: [] })).state.isSolved());
+
+    // Last-layer parity case: T-perm-like state (odd corner + odd edge permutation)
+    const tState = new CubeState();
+    [
+        ['x', 1, -1], ['y', 1, -1], ['x', 1, 1], ['y', 1, 1], ['x', 1, 1], ['z', 1, -1],
+        ['x', 1, -1], ['x', 1, -1], ['y', 1, 1], ['x', 1, 1], ['y', 1, 1],
+        ['x', 1, -1], ['y', 1, -1], ['x', 1, 1], ['z', 1, 1]
+    ].forEach(([a, l, d]) => tState.applyRotation(a, l, d));
+    check('T-perm parity case is solved', applySolution(tState, solver.solve({ state: tState, history: [] })).state.isSolved());
+}
+
+// ---------- Property tests ----------
+for (const [solver, ceiling] of [
+    [new LayeredMethodSolver(), MOVE_CEILING],
+    [new CFOPMethodSolver(), CFOP_MOVE_CEILING]
+]) {
+    console.log(`Property test (${solver.getName()}): ${PROPERTY_TRIALS} random scrambles`);
     let worst = 0;
     let failures = 0;
     for (let seed = 1; seed <= PROPERTY_TRIALS; seed++) {
@@ -195,23 +211,23 @@ console.log(`Property test: ${PROPERTY_TRIALS} random scrambles`);
             if (!done.isSolved()) {
                 failures++;
                 console.error(`  ✗ seed ${seed}: solution did not solve the cube`);
-            } else if (count > MOVE_CEILING) {
+            } else if (count > ceiling) {
                 failures++;
-                console.error(`  ✗ seed ${seed}: ${count} moves exceeds ceiling ${MOVE_CEILING}`);
+                console.error(`  ✗ seed ${seed}: ${count} moves exceeds ceiling ${ceiling}`);
             }
         } catch (err) {
             failures++;
             console.error(`  ✗ seed ${seed}: threw "${err.message}"`);
         }
     }
-    check(`all ${PROPERTY_TRIALS} scrambles solved within ${MOVE_CEILING} moves`, failures === 0, `${failures} failures`);
+    check(`all ${PROPERTY_TRIALS} scrambles solved within ${ceiling} moves`, failures === 0, `${failures} failures`);
     console.log(`  worst-case solution length: ${worst} moves`);
 }
 
 // ---------- StepSession engine (step-by-step solve mode) ----------
 console.log('StepSession engine');
 {
-    const { StepSession, STEP_STAGES } = require('../src/core/stepSession.js');
+    const { StepSession } = require('../src/core/stepSession.js');
     const STAGE_ORDER = ['Daisy', 'White Cross', 'White Corners', 'Middle Layer', 'Yellow Cross',
         'Orient Yellow Corners', 'Position Yellow Corners', 'Position Yellow Edges'];
     const serialize = st => JSON.stringify(st.cubies);
@@ -227,7 +243,10 @@ console.log('StepSession engine');
     const fresh = session.getStages();
     check('session exposes the 8 method stages in order',
         fresh.map(s => s.name).join('|') === STAGE_ORDER.join('|'));
-    check('exported STEP_STAGES matches method order', STEP_STAGES.join('|') === STAGE_ORDER.join('|'));
+    check('solver stage definitions match method order',
+        solver.getStageDefinitions().map(d => d.name).join('|') === STAGE_ORDER.join('|'));
+    check('stage definitions carry goal and algorithm text',
+        solver.getStageDefinitions().every(d => d.goal && d.algorithm));
     check('fresh session: all stages pending', fresh.every(s => s.status === 'pending'));
     check('fresh session: current step is 0', session.currentStep === 0);
 
@@ -347,18 +366,18 @@ console.log('StepSession engine');
 
 // ---------- StepSession property test: random step walks ----------
 const WALK_TRIALS = 100;
-console.log(`StepSession property test: ${WALK_TRIALS} random step walks`);
-{
+for (const walkSolver of [new LayeredMethodSolver(), new CFOPMethodSolver()]) {
+    console.log(`StepSession property test (${walkSolver.getName()}): ${WALK_TRIALS} random step walks`);
     const { StepSession } = require('../src/core/stepSession.js');
     const serialize = st => JSON.stringify(st.cubies);
-    const solver = new LayeredMethodSolver();
+    const stageCount = walkSolver.getStageDefinitions().length;
     let failures = 0;
 
     for (let seed = 1; seed <= WALK_TRIALS; seed++) {
         const rng = mulberry32(seed * 7919);
         const live = new CubeState();
         randomScramble(live, 15 + Math.floor(rng() * 20), rng);
-        const session = new StepSession(solver, live);
+        const session = new StepSession(walkSolver, live);
         const snaps = { 0: serialize(live) };
 
         try {
@@ -369,7 +388,7 @@ console.log(`StepSession property test: ${WALK_TRIALS} random step walks`);
                         .forEach(m => session.recordManual(m));
                     continue;
                 }
-                const target = Math.floor(rng() * 9); // 0..8
+                const target = Math.floor(rng() * (stageCount + 1)); // 0..stageCount
                 const prev = session.currentStep;
                 const plan = session.goTo(target);
                 if (plan.moves.length > MOVE_CEILING) {
@@ -390,7 +409,7 @@ console.log(`StepSession property test: ${WALK_TRIALS} random step walks`);
                     throw new Error(`rewind from ${prev} to ${target} missed its checkpoint`);
                 }
             }
-            const final = session.goTo(8);
+            const final = session.goTo(stageCount);
             final.moves.forEach(m => live.applyMove(m));
             if (!live.isSolved()) throw new Error('walk did not end solved');
         } catch (err) {
