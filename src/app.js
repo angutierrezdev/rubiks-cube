@@ -623,6 +623,7 @@ function playStepJump(target) {
         if (i >= labeled.length) {
             isAutoSolving = false;
             uiController.enableButtons();
+            updateStepsBtnState();
             stepSheetStatus.hidden = true;
             renderStepSheet();
             if (target === 0) uiController.updateStatus('Back at the scramble — try step 1!');
@@ -711,6 +712,7 @@ function solve() {
             hideSolveProgress();
             uiController.updateStatus('Solved! ✨');
             uiController.enableButtons();
+            updateStepsBtnState();
             return;
         }
         const stage = stages[stageIndex];
