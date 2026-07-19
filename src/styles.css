@@ -208,7 +208,7 @@ button:disabled {
 }
 #step-sheet-title {
     font-weight: bold;
-    font-size: 1rem;
+    font-size: 1.125rem;
 }
 #step-sheet-close {
     background: transparent;
@@ -218,7 +218,7 @@ button:disabled {
     letter-spacing: 0;
 }
 #step-sheet-status {
-    font-size: 0.875rem;
+    font-size: 1rem;
     font-weight: bold;
     color: #4ecdc4;
     padding: 4px 0 8px;
@@ -239,7 +239,7 @@ button:disabled {
     background: transparent;
     color: white;
     padding: 8px 10px;
-    font-size: 1rem;
+    font-size: 1.0625rem;
     font-weight: normal;
     text-transform: none;
     letter-spacing: 0;
@@ -262,18 +262,18 @@ button:disabled {
 .step-meta {
     margin-left: auto;
     opacity: 0.75;
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
     flex-shrink: 0;
 }
 #step-instructions {
     border-top: 1px solid rgba(255, 255, 255, 0.15);
     padding-top: 10px;
     margin-top: 6px;
-    font-size: 0.875rem;
+    font-size: 1rem;
 }
 #step-instructions h4 {
     margin: 0 0 6px;
-    font-size: 1rem;
+    font-size: 1.125rem;
 }
 #step-instructions p {
     margin: 4px 0;
@@ -282,8 +282,8 @@ button:disabled {
 }
 #step-front-swatch {
     display: inline-block;
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     border-radius: 3px;
     border: 1px solid white;
     vertical-align: -2px;
@@ -535,7 +535,7 @@ button:disabled {
     }
 
     .step-item {
-        font-size: 0.9375rem;
+        font-size: 1rem;
         padding: 7px 8px;
     }
     
