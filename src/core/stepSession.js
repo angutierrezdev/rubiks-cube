@@ -1,9 +1,12 @@
 // Step-by-step solve session
-// Pure planner for step mode: tracks how far through the layered method the
+// Pure planner for step mode: tracks how far through the solving method the
 // cube is, and turns step selections into move plans. It never animates and
 // never touches the live cube — callers apply the returned moves themselves
 // and report the user's own turns via recordManual(). No DOM or Three.js
 // dependencies so it can run headless under Node for tests.
+//
+// The stage list comes from the solver's own getStageDefinitions(), so any
+// steppable SolverStrategy works, not just the layered method.
 //
 // goTo(n) -> { kind: 'forward' | 'rewind' | 'none',
 //              moves: [{ name, axis, layer, direction }],
@@ -13,20 +16,22 @@ const stepNotation = (typeof module !== 'undefined' && module.exports)
     ? require('../strategies/solverStrategy.js').moveNotation
     : window.solverMoveNotation;
 
-const STEP_STAGES = ['Daisy', 'White Cross', 'White Corners', 'Middle Layer', 'Yellow Cross',
-    'Orient Yellow Corners', 'Position Yellow Corners', 'Position Yellow Edges'];
-
 class StepSession {
     /**
-     * @param solver a stage-emitting SolverStrategy (the layered method)
+     * @param solver a stage-emitting SolverStrategy with stage definitions
      * @param startState CubeState at session start (cloned, not retained)
      */
     constructor(solver, startState) {
         this.solver = solver;
+        this.stageDefs = solver.getStageDefinitions();
+        if (this.stageDefs.length === 0) {
+            throw new Error(`${solver.getName()} does not define step stages`);
+        }
+        this.stageNames = this.stageDefs.map(d => d.name);
         this.shadow = startState.clone();
         this.ledger = [];            // every move applied since session start
         this.checkpoints = { 0: 0 }; // step index -> ledger length at end of that stage
-        this.step = 0;               // 0 = scrambled start, 1..8 = completed stage
+        this.step = 0;               // 0 = scrambled start, 1..N = completed stage
         this.dirty = false;          // user turned faces since the last plan
         this.alive = true;           // scramble/reset invalidates the session
     }
@@ -52,13 +57,22 @@ class StepSession {
     }
 
     getStages() {
-        return STEP_STAGES.map((name, i) => {
+        return this.stageNames.map((name, i) => {
             const index = i + 1;
             const status = index === this.step ? 'current'
                 : index < this.step ? 'done'
                 : 'pending';
             return { index, name, status };
         });
+    }
+
+    /** Stage definition ({ name, goal, algorithm }) for a 1-based step index. */
+    getStageDefinition(index) {
+        return this.stageDefs[index - 1] || null;
+    }
+
+    get stageCount() {
+        return this.stageNames.length;
     }
 
     /**
@@ -71,16 +85,16 @@ class StepSession {
         solved.forEach(st => { movesByStage[st.stage] = st.moves; });
         const from = this.dirty ? 0 : this.step;
         const stages = [];
-        for (let i = from + 1; i <= STEP_STAGES.length; i++) {
-            const moves = (movesByStage[STEP_STAGES[i - 1]] || []).map(m => ({ ...m }));
-            stages.push({ index: i, stage: STEP_STAGES[i - 1], moves });
+        for (let i = from + 1; i <= this.stageNames.length; i++) {
+            const moves = (movesByStage[this.stageNames[i - 1]] || []).map(m => ({ ...m }));
+            stages.push({ index: i, stage: this.stageNames[i - 1], moves });
         }
         return stages;
     }
 
     goTo(target) {
         if (!this.alive) throw new Error('Step session is no longer valid');
-        if (!Number.isInteger(target) || target < 0 || target > STEP_STAGES.length) {
+        if (!Number.isInteger(target) || target < 0 || target > this.stageNames.length) {
             throw new Error(`Invalid step: ${target}`);
         }
         if (target === this.step && !this.dirty) return { kind: 'none', moves: [], stages: [] };
@@ -111,7 +125,7 @@ class StepSession {
         const solved = this.solver.solve({ state: this.shadow.clone(), history: [] });
         const movesByStage = {};
         solved.forEach(st => {
-            if (!STEP_STAGES.includes(st.stage)) {
+            if (!this.stageNames.includes(st.stage)) {
                 throw new Error(`Solver emitted unknown stage: ${st.stage}`);
             }
             movesByStage[st.stage] = st.moves;
@@ -120,7 +134,7 @@ class StepSession {
         // re-plans from stage 1 (untouched stages simply come back empty).
         const from = this.dirty ? 0 : this.step;
         for (let i = 1; i <= from; i++) {
-            if ((movesByStage[STEP_STAGES[i - 1]] || []).length > 0) {
+            if ((movesByStage[this.stageNames[i - 1]] || []).length > 0) {
                 throw new Error(`Stage ${i} regressed without recorded moves`);
             }
         }
@@ -128,14 +142,14 @@ class StepSession {
         const stages = [];
         const flat = [];
         for (let i = from + 1; i <= target; i++) {
-            const moves = (movesByStage[STEP_STAGES[i - 1]] || []).map(m => ({ ...m }));
+            const moves = (movesByStage[this.stageNames[i - 1]] || []).map(m => ({ ...m }));
             moves.forEach(m => {
                 this.shadow.applyMove(m);
                 this.ledger.push({ axis: m.axis, layer: m.layer, direction: m.direction });
                 flat.push(m);
             });
             this.checkpoints[i] = this.ledger.length;
-            stages.push({ index: i, stage: STEP_STAGES[i - 1], moves });
+            stages.push({ index: i, stage: this.stageNames[i - 1], moves });
         }
         this.step = target;
         this.dirty = false;
@@ -145,8 +159,7 @@ class StepSession {
 
 if (typeof window !== 'undefined') {
     window.StepSession = StepSession;
-    window.STEP_STAGES = STEP_STAGES;
 }
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { StepSession, STEP_STAGES };
+    module.exports = { StepSession };
 }

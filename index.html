@@ -53,7 +53,7 @@
         <div class="control-row">
             <select id="solverSelect" aria-label="Solving method">
                 <option value="layered" selected>Layered Method</option>
-                <option value="retrace">Retrace Moves</option>
+                <option value="cfop">Beginner CFOP (2-Look)</option>
             </select>
             <button id="stepsBtn">Steps</button>
         </div>
@@ -131,7 +131,10 @@
     <script src="src/rendering/cubeRenderer.js"></script>
     <script src="src/strategies/rotationStrategy.js"></script>
     <script src="src/strategies/solverStrategy.js"></script>
+    <script src="src/strategies/solverEngineBase.js"></script>
+    <script src="src/strategies/sharedStages.js"></script>
     <script src="src/strategies/layeredMethodSolver.js"></script>
+    <script src="src/strategies/cfopMethodSolver.js"></script>
     <script src="src/controllers/uiController.js"></script>
     <script src="src/controllers/cameraController.js"></script>
     <script src="src/rendering/highlightManager.js"></script>

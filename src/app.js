@@ -407,7 +407,6 @@ function scramble() {
     uiController.disableButtons();
 
     rubiksCube.scramble(() => {
-        updateRetraceAvailability();
         uiController.updateStatus('Scrambled! Click Solve to auto-solve');
         uiController.enableButtons();
     });
@@ -417,7 +416,7 @@ function scramble() {
 const SOLVE_MOVE_DURATION = 90; // faster than manual moves so long solutions stay watchable
 const solverStrategies = {
     layered: new LayeredMethodSolver(),
-    retrace: new RetraceSolver()
+    cfop: new CFOPMethodSolver()
 };
 const solverSelect = document.getElementById('solverSelect');
 const solveProgressEl = document.getElementById('solve-progress');
@@ -481,23 +480,6 @@ function getSelectedSolver() {
     return solverStrategies[key] || solverStrategies.layered;
 }
 
-const retraceOption = solverSelect ? solverSelect.querySelector('option[value="retrace"]') : null;
-
-// Retrace is only honest while moveHistory still describes the path from
-// solved to the current state; unrecorded moves (step mode, interrupted
-// solves) break that, and a step rewind can restore it. Re-checked whenever
-// the cube settles, and again as a backstop when Solve is clicked.
-function updateRetraceAvailability() {
-    if (!solverSelect || !retraceOption) return;
-    const ok = solverCanRetrace(rubiksCube.state, rubiksCube.moveHistory);
-    retraceOption.disabled = !ok;
-    retraceOption.textContent = ok ? 'Retrace Moves' : 'Retrace Moves (moves not tracked)';
-    if (!ok && solverSelect.value === 'retrace') {
-        solverSelect.value = 'layered';
-        uiController.updateStatus('Move history no longer matches — switched to Layered Method');
-    }
-    updateStepsBtnState();
-}
 
 function showSolveProgress(text) {
     if (solveProgressEl) {
@@ -514,16 +496,6 @@ function hideSolveProgress() {
 
 // ---- Step-by-step solve mode (bottom sheet driven by StepSession) ----
 const STEP_REWIND_DURATION = 45; // rewinds can be long, play them extra fast
-const STEP_INFO = {
-    1: { goal: 'Bring the four white edges up around the yellow center, like the petals of a daisy.', alg: 'No fixed algorithm — move each white edge up case by case' },
-    2: { goal: 'Turn the top until each petal’s side color matches its center, then drop it with a double turn.', alg: 'U (align) + F2' },
-    3: { goal: 'Put each white corner above its slot (between its two matching centers) and insert it.', alg: "R U R'  ·  F' U' F  ·  R F R2 F' R'" },
-    4: { goal: 'Find top edges without white or yellow, match their side color to a center, and insert left or right.', alg: "U R U' R' U' F' U F (right)  ·  U' L' U L U F U' F' (left)" },
-    5: { goal: 'Make a yellow cross on top: dot → L-shape → line → cross.', alg: "F R U R' U' F'" },
-    6: { goal: 'Twist each yellow corner at the front-right until yellow faces up, then turn U to bring the next one.', alg: "R' D' R D (repeat in pairs)" },
-    7: { goal: 'Move the yellow corners to the slots matching their colors.', alg: "R' F R' B2 R F' R' B2 R2  ·  T-perm for a swap" },
-    8: { goal: 'Cycle the last yellow edges into place. The cube ends solved!', alg: "R U' R U R U R U' R' U' R2" }
-};
 
 const stepsBtn = document.getElementById('stepsBtn');
 const stepSheet = document.getElementById('step-sheet');
@@ -544,7 +516,7 @@ function stepModeActive() {
 
 function ensureStepSession() {
     if (!stepModeActive()) {
-        stepSession = new StepSession(solverStrategies.layered, rubiksCube.state);
+        stepSession = new StepSession(getSelectedSolver(), rubiksCube.state);
     }
 }
 
@@ -599,9 +571,10 @@ function renderStepSheet() {
     stepInstructions.hidden = false;
     if (next) {
         const nextMoves = previewByIndex[next] || [];
-        stepInstructionsTitle.textContent = `Step ${next}: ${STEP_STAGES[next - 1]}`;
-        stepInstructionsGoal.textContent = STEP_INFO[next].goal;
-        stepInstructionsAlg.textContent = `Algorithm: ${STEP_INFO[next].alg}`;
+        const def = stepSession.getStageDefinition(next);
+        stepInstructionsTitle.textContent = `Step ${next}: ${def.name}`;
+        stepInstructionsGoal.textContent = def.goal;
+        stepInstructionsAlg.textContent = `Algorithm: ${def.algorithm}`;
         stepInstructionsMoves.textContent = nextMoves.length
             ? `Your cube: ${formatStepMoves(nextMoves)}`
             : 'Your cube: already done ✓';
@@ -650,11 +623,10 @@ function playStepJump(target) {
         if (i >= labeled.length) {
             isAutoSolving = false;
             uiController.enableButtons();
-            updateRetraceAvailability();
             stepSheetStatus.hidden = true;
             renderStepSheet();
             if (target === 0) uiController.updateStatus('Back at the scramble — try step 1!');
-            else if (target === 8 && plan.kind === 'forward') uiController.updateStatus('Solved! ✨');
+            else if (target === stepSession.stageCount && plan.kind === 'forward') uiController.updateStatus('Solved! ✨');
             else uiController.updateStatus(`Step ${target} done — try the next one yourself!`);
             return;
         }
@@ -683,7 +655,9 @@ stepSheetClose.addEventListener('click', () => {
 
 if (solverSelect) {
     solverSelect.addEventListener('change', () => {
-        if (solverSelect.value === 'retrace') invalidateStepSession();
+        // The session plans with the previously selected solver's stages, so
+        // any method change invalidates it.
+        invalidateStepSession();
         updateStepsBtnState();
     });
 }
@@ -695,23 +669,16 @@ rubiksCube.onUserMove = move => {
         stepSession.recordManual(move);
         renderStepSheet();
     }
-    updateRetraceAvailability();
 };
-
-updateRetraceAvailability();
 
 // Solve the cube with the selected method
 function solve() {
     if (isAutoSolving || rubiksCube.getIsAnimating() || rubiksCube.getAnimationQueueLength() > 0) return;
 
-    // Backstop: never let a stale dropdown fire a retrace that can't reach
-    // solved — this re-checks and auto-switches to Layered if needed.
-    updateRetraceAvailability();
-
     // In step mode, Solve means "jump to the final step" so the session
     // stays valid and the user can still rewind afterwards.
-    if (stepModeActive() && getSelectedSolver() === solverStrategies.layered) {
-        playStepJump(8);
+    if (stepModeActive() && getSelectedSolver() === stepSession.solver) {
+        playStepJump(stepSession.stageCount);
         return;
     }
 
@@ -721,9 +688,7 @@ function solve() {
         stages = solver.solve({ state: rubiksCube.state, history: rubiksCube.moveHistory });
     } catch (err) {
         console.error('Solver failed:', err);
-        uiController.updateStatus(solverCanRetrace(rubiksCube.state, rubiksCube.moveHistory)
-            ? 'Solver failed — try Retrace Moves or Reset'
-            : 'Solver failed — try Reset');
+        uiController.updateStatus('Solver failed — try Reset');
         return;
     }
 
@@ -744,7 +709,6 @@ function solve() {
             rubiksCube.moveHistory = [];
             isAutoSolving = false;
             hideSolveProgress();
-            updateRetraceAvailability();
             uiController.updateStatus('Solved! ✨');
             uiController.enableButtons();
             return;
@@ -771,7 +735,6 @@ function reset() {
     if (rubiksCube.getIsAnimating() || rubiksCube.getAnimationQueueLength() > 0) return;
     invalidateStepSession();
     rubiksCube.reset();
-    updateRetraceAvailability();
     uiController.updateStatus('Ready');
 }
 

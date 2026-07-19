@@ -45,7 +45,10 @@ jobs:
           uglifyjs src/rendering/cubeRenderer.js -o dist/src/rendering/cubeRenderer.js --compress --mangle
           uglifyjs src/strategies/rotationStrategy.js -o dist/src/strategies/rotationStrategy.js --compress --mangle
           uglifyjs src/strategies/solverStrategy.js -o dist/src/strategies/solverStrategy.js --compress --mangle
+          uglifyjs src/strategies/solverEngineBase.js -o dist/src/strategies/solverEngineBase.js --compress --mangle
+          uglifyjs src/strategies/sharedStages.js -o dist/src/strategies/sharedStages.js --compress --mangle
           uglifyjs src/strategies/layeredMethodSolver.js -o dist/src/strategies/layeredMethodSolver.js --compress --mangle
+          uglifyjs src/strategies/cfopMethodSolver.js -o dist/src/strategies/cfopMethodSolver.js --compress --mangle
           uglifyjs src/controllers/uiController.js -o dist/src/controllers/uiController.js --compress --mangle
           uglifyjs src/controllers/cameraController.js -o dist/src/controllers/cameraController.js --compress --mangle
           uglifyjs src/rendering/highlightManager.js -o dist/src/rendering/highlightManager.js --compress --mangle
