@@ -654,6 +654,15 @@ stepSheetClose.addEventListener('click', () => {
     stepSheet.hidden = true;
 });
 
+// Tapping anywhere outside the sheet closes it (session stays alive, like the
+// ✕ button) so the cube animation underneath is visible. The Steps button is
+// excluded — its own click handler toggles the sheet.
+document.addEventListener('pointerdown', (e) => {
+    if (stepSheet.hidden) return;
+    if (stepSheet.contains(e.target) || stepsBtn.contains(e.target)) return;
+    stepSheet.hidden = true;
+});
+
 if (solverSelect) {
     solverSelect.addEventListener('change', () => {
         // The session plans with the previously selected solver's stages, so
