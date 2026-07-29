@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <base href="/rubiks-cube/">
     <title>3D Rubik's Cube Simulation</title>
+
+    <!-- Version first, so the title carries it before anything renders and the
+         service worker and the page can never report different builds. -->
+    <script src="version.js"></script>
+    <script>document.title += ` v${APP_VERSION}`;</script>
     
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="images/favicon.ico">
@@ -106,6 +111,7 @@
         <p>⌨️ Shift + key for prime (')</p>
         <h4>Face Swipe (Desktop)</h4>
         <p>⌘/Ctrl + drag to swipe faces</p>
+        <p id="app-version"></p>
     </div>
     <div id="debug-panel">
         <h3>Debug Info</h3>
@@ -143,6 +149,10 @@
     <script src="src/core/stepSession.js"></script>
     <script src="src/core/cube.js"></script>
     <script>
+        // Shows which build is running - the first thing to check when a bug
+        // report and the current code disagree.
+        document.getElementById('app-version').textContent = `Version ${APP_VERSION}`;
+
         // Splash screen management
         function hideSplashScreen() {
             const splashScreen = document.getElementById('splash-screen');

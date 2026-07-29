@@ -1,10 +1,16 @@
-const VERSION = '1.7.3';
+// Shared with the page so the two can never disagree about the version.
+// Relative to this file's URL, so it resolves under whatever base path the
+// app is deployed to.
+importScripts('version.js');
+
+const VERSION = APP_VERSION;
 const CACHE_NAME = `rubiks-cube-v${VERSION}`;
 // Derive base path from SW location (e.g. '' for user site, '/rubiks-cube' for project site)
 const BASE = self.location.pathname.replace(/\/sw\.js$/i, '') || '';
 const urlsToCache = [
   BASE + '/',
   BASE + '/index.html',
+  BASE + '/version.js',
   BASE + '/manifest.json',
   BASE + '/src/styles.css',
   BASE + '/src/app.js',
