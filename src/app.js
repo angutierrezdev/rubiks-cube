@@ -810,6 +810,7 @@ let modifierKeyState = {
     swipeInitialPos: null,      // Initial position for direction detection (corners)
     swipeStartFace: null,       // Face being swiped
     rotationContext: null,      // Live rotation: { group, axis, layer, angle, ... }
+    deferredTurn: null,         // Face captured while a previous turn was still easing
     highlightedCubie: null,     // Currently highlighted cubie
     originalMaterials: null,    // Original materials for restoration
     cornerRotationStarted: false // Whether corner rotation has started (after direction detected)
@@ -906,9 +907,9 @@ let pendingSettlements = [];
 // itself, and the touch path did not guard at all.
 function currentTurnWorld() {
     let liveTurnSource = null;
-    if (touchState.rotationContext) {
+    if (touchState.rotationContext || touchState.deferredTurn) {
         liveTurnSource = TurnArbiter.TURN_SOURCES.TOUCH;
-    } else if (modifierKeyState.rotationContext) {
+    } else if (modifierKeyState.rotationContext || modifierKeyState.deferredTurn) {
         liveTurnSource = TurnArbiter.TURN_SOURCES.MOUSE;
     }
 
@@ -1023,15 +1024,57 @@ function settleRotationGroup(ctx, finalAngle) {
     // normalizedTurns === 0 means the face came back where it started
 
     updateFrontFaceIndicator();
+
+    if (!drainingSettlements && pendingSettlements.length === 0) {
+        startDeferredTurns();
+    }
 }
+
+// True while settlePendingRotations is draining, so hand-off waits for the
+// whole drain instead of firing after the first context comes off the list.
+let drainingSettlements = false;
 
 // Settle every context still easing toward its snap angle, at that snap angle
 // rather than wherever the ease happens to be, so the cube stays on the grid.
 function settlePendingRotations() {
     const easing = pendingSettlements.slice();
     pendingSettlements.length = 0;
+
+    drainingSettlements = true;
     easing.forEach(ctx => settleRotationGroup(ctx, ctx.snapAngle));
+    drainingSettlements = false;
+
+    if (easing.length > 0) startDeferredTurns();
 }
+
+// A gesture that arrived while a previous turn was still easing was captured
+// but given no rotation group. The cube is free now, so build it.
+//
+// The turn starts from zero and tracks from wherever the finger is now, which
+// means the drag that happened during the wait is discarded. Replaying it does
+// not help: it relocates the pop onto the new face and can make it larger.
+function startDeferredTurns() {
+    const deferredTouch = touchState.deferredTurn;
+    if (deferredTouch) {
+        touchState.deferredTurn = null;
+        touchState.rotationContext =
+            createRotationContext(deferredTouch.axis, deferredTouch.layer, deferredTouch.angle);
+    }
+
+    const deferredMouse = modifierKeyState.deferredTurn;
+    if (deferredMouse) {
+        modifierKeyState.deferredTurn = null;
+        modifierKeyState.rotationContext =
+            createRotationContext(deferredMouse.axis, deferredMouse.layer, deferredMouse.angle);
+    }
+}
+
+const SNAP_DURATION = 200;
+
+// How long an in-flight snap gets once a new gesture is waiting behind it.
+// The whole 200ms costs the waiting gesture most of its swipe, and the drag
+// spent waiting cannot all be recovered, so the ease is hurried instead.
+const HANDOFF_SNAP_DURATION = 50;
 
 // Ease a rotation to its nearest quarter turn, then settle it. The context is
 // captured here rather than read from the live gesture state, so a gesture
@@ -1039,30 +1082,31 @@ function settlePendingRotations() {
 function animateSnapToQuarterTurn(ctx) {
     if (!ctx || !ctx.group) return;
 
-    const startAngle = ctx.angle;
-    const snapAngle = Math.round(startAngle / (Math.PI / 2)) * (Math.PI / 2);
-    const remainingAngle = snapAngle - startAngle;
+    const snapAngle = Math.round(ctx.angle / (Math.PI / 2)) * (Math.PI / 2);
     ctx.snapAngle = snapAngle;
 
-    if (Math.abs(remainingAngle) < 0.01) {
+    if (Math.abs(snapAngle - ctx.angle) < 0.01) {
         settleRotationGroup(ctx, snapAngle);
         return;
     }
 
-    pendingSettlements.push(ctx);
+    // The ease is described on the context rather than captured in the
+    // closure, so it can be re-based mid-flight when a gesture starts waiting.
+    ctx.easeFrom = ctx.angle;
+    ctx.easeStart = Date.now();
+    ctx.easeDuration = SNAP_DURATION;
 
-    const duration = 200;
-    const startTime = Date.now();
+    pendingSettlements.push(ctx);
 
     function animate() {
         // A new gesture may have settled this context out from under us.
         if (ctx.settled) return;
 
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
+        const elapsed = Date.now() - ctx.easeStart;
+        const progress = Math.min(elapsed / ctx.easeDuration, 1);
         const eased = 1 - Math.pow(1 - progress, 3);
 
-        applyRotationAngle(ctx, startAngle + remainingAngle * eased);
+        applyRotationAngle(ctx, ctx.easeFrom + (snapAngle - ctx.easeFrom) * eased);
 
         if (progress < 1) {
             requestAnimationFrame(animate);
@@ -1074,11 +1118,34 @@ function animateSnapToQuarterTurn(ctx) {
     animate();
 }
 
+// A gesture is waiting on these to finish. Re-base each ease to land in
+// HANDOFF_SNAP_DURATION starting from where the face is right now: the face
+// keeps moving from its current angle, so there is no jump - it just gets
+// there sooner, and the waiting gesture gets most of its swipe back.
+function hastenPendingSettlements() {
+    const now = Date.now();
+    pendingSettlements.forEach(ctx => {
+        if (ctx.easeStart + ctx.easeDuration - now <= HANDOFF_SNAP_DURATION) return;
+        ctx.easeFrom = ctx.angle;
+        ctx.easeStart = now;
+        ctx.easeDuration = HANDOFF_SNAP_DURATION;
+    });
+}
+
 // Start face rotation for modifier key mode. Guarded here rather than at each
 // call site so a new one cannot skip the arbiter by forgetting to ask.
-// Returns whether the rotation actually started.
+// Returns whether the gesture was accepted - on a deferral that is still true,
+// the rotation group just arrives at hand-off instead of now.
 function startModifierFaceRotation(axis, layer) {
-    if (!requestTurn(TurnArbiter.TURN_SOURCES.MOUSE).allowed) return false;
+    const verdict = requestTurn(TurnArbiter.TURN_SOURCES.MOUSE);
+    if (!verdict.allowed) return false;
+
+    if (verdict.verdict === TurnArbiter.TURN_VERDICTS.DEFER) {
+        modifierKeyState.deferredTurn = { axis, layer, angle: 0 };
+        hastenPendingSettlements();
+        return true;
+    }
+
     modifierKeyState.rotationContext = createRotationContext(axis, layer, 0);
     return true;
 }
@@ -1087,6 +1154,9 @@ function startModifierFaceRotation(axis, layer) {
 // The context is handed to the animation and cleared here, so the next gesture
 // starts from a clean slate even while this one is still easing.
 function completeModifierFaceRotation() {
+    // The drag ended before hand-off, so there is nothing left to start.
+    modifierKeyState.deferredTurn = null;
+
     const ctx = modifierKeyState.rotationContext;
     modifierKeyState.rotationContext = null;
     animateSnapToQuarterTurn(ctx);
@@ -1335,18 +1405,21 @@ container.addEventListener('mousemove', (e) => {
                     startModifierFaceRotation(selectedSlice.axis, selectedSlice.layer);
             }
             
-            // Only rotate if the rotation group has been created
+            // A turn still waiting for hand-off has no group yet, so its
+            // drag accumulates on the parked turn instead.
             const ctx = modifierKeyState.rotationContext;
-            if (ctx) {
+            const turning = ctx || modifierKeyState.deferredTurn;
+            if (turning) {
                 const deltaAngle = calculateModifierRotationAngle(
                     deltaX,
                     deltaY,
-                    ctx.axis,
-                    ctx.layer,
+                    turning.axis,
+                    turning.layer,
                     faceInfo.cubiePos
                 );
 
-                applyRotationAngle(ctx, ctx.angle + deltaAngle);
+                if (ctx) applyRotationAngle(ctx, ctx.angle + deltaAngle);
+                else turning.angle += deltaAngle;
             }
         }
         
@@ -1366,9 +1439,7 @@ container.addEventListener('mousemove', (e) => {
 container.addEventListener('mouseup', () => {
     if (modifierKeyState.isLocked) {
         // Complete face rotation if we were in modifier key mode
-        if (modifierKeyState.rotationContext) {
-            completeModifierFaceRotation();
-        }
+        completeModifierFaceRotation();
         modifierKeyState.isLocked = false;
         modifierKeyState.swipeStartPos = null;
         modifierKeyState.swipeInitialPos = null;
@@ -1384,9 +1455,7 @@ container.addEventListener('mouseup', () => {
 
 container.addEventListener('mouseleave', () => {
     if (modifierKeyState.isLocked) {
-        if (modifierKeyState.rotationContext) {
-            completeModifierFaceRotation();
-        }
+        completeModifierFaceRotation();
         modifierKeyState.isLocked = false;
         modifierKeyState.swipeStartPos = null;
         modifierKeyState.swipeInitialPos = null;
@@ -1411,6 +1480,7 @@ let touchState = {
     swipeStartFace: null, // Face being swiped
     swipeDirection: null, // Direction of swipe
     rotationContext: null, // Live rotation: { group, axis, layer, angle, ... }
+    deferredTurn: null,   // Face captured while a previous turn was still easing
     highlightedCubie: null, // Currently highlighted cubie
     originalMaterials: null, // Original materials for restoration
     cornerRotationStarted: false, // Whether corner rotation has started (after direction detected)
@@ -1598,9 +1668,21 @@ function getFaceFromTouch(touch) {
 
 // Start face rotation with continuous control. Guarded here rather than at
 // each call site so a new one cannot skip the arbiter by forgetting to ask.
-// Returns whether the rotation actually started.
+// Returns whether the gesture was accepted - on a deferral that is still true,
+// the rotation group just arrives at hand-off instead of now.
 function startFaceRotation(axis, layer, startAngle = 0) {
-    if (!requestTurn(TurnArbiter.TURN_SOURCES.TOUCH).allowed) return false;
+    const verdict = requestTurn(TurnArbiter.TURN_SOURCES.TOUCH);
+    if (!verdict.allowed) return false;
+
+    // The previous turn is still easing to its snap angle. Hold the face this
+    // gesture picked and let that ease finish - cutting it short pops the face
+    // to 90 degrees, which is the jarring thing this avoids.
+    if (verdict.verdict === TurnArbiter.TURN_VERDICTS.DEFER) {
+        touchState.deferredTurn = { axis, layer, angle: 0 };
+        hastenPendingSettlements();
+        return true;
+    }
+
     touchState.rotationContext = createRotationContext(axis, layer, startAngle);
     return true;
 }
@@ -1609,6 +1691,9 @@ function startFaceRotation(axis, layer, startAngle = 0) {
 // to the animation and cleared here, so the next gesture starts from a clean
 // slate even while this one is still easing.
 function completeFaceRotation() {
+    // The finger lifted before hand-off, so there is nothing left to start.
+    touchState.deferredTurn = null;
+
     const ctx = touchState.rotationContext;
     touchState.rotationContext = null;
     animateSnapToQuarterTurn(ctx);
@@ -1981,23 +2066,28 @@ container.addEventListener('touchmove', (e) => {
                         startFaceRotation(selectedSlice.axis, selectedSlice.layer, 0);
                 }
                 
-                // Only rotate if the rotation group has been created. The
-                // context carries the axis and layer the group was actually
-                // built from, which is what must drive the angle.
+                // The context carries the axis and layer the group was
+                // actually built from, which is what must drive the angle. A
+                // turn still waiting for hand-off has no group yet, so its
+                // drag accumulates on the parked turn and is applied the
+                // moment the group appears - otherwise the swipe spent
+                // waiting is lost and the turn never reaches 45 degrees.
                 const ctx = touchState.rotationContext;
-                if (ctx) {
+                const turning = ctx || touchState.deferredTurn;
+                if (turning) {
                     // Calculate incremental angle using proper 3D geometry
                     // This works for all faces and all positions on each face
                     const deltaAngle = calculateTouchRotationAngle(
                         deltaX,
                         deltaY,
-                        ctx.axis,
-                        ctx.layer,
+                        turning.axis,
+                        turning.layer,
                         faceInfo.cubiePos
                     );
 
                     // Accumulate rotation incrementally
-                    applyRotationAngle(ctx, ctx.angle + deltaAngle);
+                    if (ctx) applyRotationAngle(ctx, ctx.angle + deltaAngle);
+                    else turning.angle += deltaAngle;
                 }
             }
             
@@ -2019,8 +2109,8 @@ container.addEventListener('touchend', (e) => {
         touchState.isPinchZoom = false;
         touchState.initialPinchDistance = null;
         
-        if (touchState.swipeTouch && touchState.rotationContext) {
-            // Complete the face rotation
+        if (touchState.swipeTouch) {
+            // Complete the face rotation, or drop one still waiting to start
             completeFaceRotation();
         }
         
@@ -2043,9 +2133,7 @@ container.addEventListener('touchend', (e) => {
         
         if (touchState.lockTouch && remainingId === touchState.lockTouch.id) {
             // Lock touch remains, swipe ended
-            if (touchState.rotationContext) {
-                completeFaceRotation();
-            }
+            completeFaceRotation();
             touchState.swipeTouch = null;
             touchState.swipeStartPos = null;
             touchState.swipeInitialPos = null;
@@ -2064,9 +2152,7 @@ container.addEventListener('touchend', (e) => {
             touchState.swipeInitialPos = null;
             touchState.swipeStartFace = null;
             touchState.cornerRotationStarted = false;
-            if (touchState.rotationContext) {
-                completeFaceRotation();
-            }
+            completeFaceRotation();
             touchState.isLocked = false;
             removeHighlight();
             
@@ -2090,9 +2176,7 @@ container.addEventListener('touchend', (e) => {
             const newSwipeTouch = e.touches[touchIds.indexOf(touchState.swipeTouch.id)];
             const faceInfo = getFaceFromTouch(newSwipeTouch);
             if (faceInfo) {
-                if (touchState.rotationContext) {
-                    completeFaceRotation();
-                }
+                completeFaceRotation();
                 const initialPos = {
                     x: newSwipeTouch.clientX,
                     y: newSwipeTouch.clientY
@@ -2115,9 +2199,7 @@ container.addEventListener('touchend', (e) => {
             }
         } else if (touchState.swipeTouch && !touchIds.includes(touchState.swipeTouch.id)) {
             // Swipe touch ended
-            if (touchState.rotationContext) {
-                completeFaceRotation();
-            }
+            completeFaceRotation();
             touchState.swipeTouch = {
                 id: touchIds.find(id => id !== touchState.lockTouch?.id),
                 x: e.touches[touchIds.indexOf(touchIds.find(id => id !== touchState.lockTouch?.id))].clientX,
