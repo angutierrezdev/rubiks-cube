@@ -27,6 +27,7 @@ const urlsToCache = [
   BASE + '/src/strategies/cfopMethodSolver.js',
   BASE + '/src/controllers/uiController.js',
   BASE + '/src/controllers/arcballRotation.js',
+  BASE + '/src/controllers/turnArbiter.js',
   // Icon files
   BASE + '/images/favicon.ico',
   BASE + '/images/favicon.png',

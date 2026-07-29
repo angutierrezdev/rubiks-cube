@@ -414,7 +414,7 @@ function executeMove(moveName, record = true, callback = null) {
 
 // Scramble the cube
 function scramble() {
-    if (rubiksCube.getIsAnimating() || rubiksCube.getAnimationQueueLength() > 0) return;
+    if (!canStartSequence()) return;
 
     invalidateStepSession(); // a new scramble is a new puzzle
     uiController.updateStatus('Scrambling...');
@@ -627,7 +627,7 @@ function updateStepFrontIndicator() {
 }
 
 function playStepJump(target) {
-    if (isAutoSolving || rubiksCube.getIsAnimating() || rubiksCube.getAnimationQueueLength() > 0) return;
+    if (isAutoSolving || !canStartSequence()) return;
     if (!stepModeActive()) return;
 
     let plan;
@@ -719,7 +719,7 @@ rubiksCube.onUserMove = move => {
 
 // Solve the cube with the selected method
 function solve() {
-    if (isAutoSolving || rubiksCube.getIsAnimating() || rubiksCube.getAnimationQueueLength() > 0) return;
+    if (isAutoSolving || !canStartSequence()) return;
 
     // In step mode, Solve means "jump to the final step" so the session
     // stays valid and the user can still rewind afterwards.
@@ -779,7 +779,7 @@ function solve() {
 
 // Reset the cube
 function reset() {
-    if (rubiksCube.getIsAnimating() || rubiksCube.getAnimationQueueLength() > 0) return;
+    if (!canStartSequence()) return;
     invalidateStepSession();
     rubiksCube.reset();
     uiController.updateStatus('Ready');
@@ -900,6 +900,46 @@ function getFaceFromMouse(mouseEvent) {
 // but they still own their cubies, so they must be settled before any new
 // group can be built out of those same cubies.
 let pendingSettlements = [];
+
+// Every path that turns a face asks the arbiter first. Keeping the question in
+// one place is the point: the bug this fixes existed because each path guarded
+// itself, and the touch path did not guard at all.
+function currentTurnWorld() {
+    let liveTurnSource = null;
+    if (touchState.rotationContext) {
+        liveTurnSource = TurnArbiter.TURN_SOURCES.TOUCH;
+    } else if (modifierKeyState.rotationContext) {
+        liveTurnSource = TurnArbiter.TURN_SOURCES.MOUSE;
+    }
+
+    return {
+        liveTurnSource,
+        settlingTurns: pendingSettlements.length,
+        programmaticTurn: isAutoSolving
+            || rubiksCube.getIsAnimating()
+            || rubiksCube.getAnimationQueueLength() > 0
+    };
+}
+
+// Ask whether a turn may start, telling the user when the answer is no.
+// Callers start the turn unless the verdict was a refusal - a deferred turn is
+// still going to happen.
+function requestTurn(source) {
+    const verdict = TurnArbiter.evaluateTurnRequest({ source }, currentTurnWorld());
+    if (!verdict.allowed && verdict.message) {
+        uiController.updateStatus(verdict.message);
+    }
+    return verdict;
+}
+
+// A sequence may start only if nothing is already animating and no user turn
+// is still in flight. The arbiter owns the second half of that question; a
+// solve planned around a face the user has not finished turning would be
+// planned around a cube position that is about to change.
+function canStartSequence() {
+    if (rubiksCube.getIsAnimating() || rubiksCube.getAnimationQueueLength() > 0) return false;
+    return requestTurn(TurnArbiter.TURN_SOURCES.PROGRAMMATIC).allowed;
+}
 
 // A rotation's angle only ever moves through here, so the axis-to-property
 // mapping lives in one place instead of the six switch statements it replaces.
@@ -1034,9 +1074,13 @@ function animateSnapToQuarterTurn(ctx) {
     animate();
 }
 
-// Start face rotation for modifier key mode
+// Start face rotation for modifier key mode. Guarded here rather than at each
+// call site so a new one cannot skip the arbiter by forgetting to ask.
+// Returns whether the rotation actually started.
 function startModifierFaceRotation(axis, layer) {
+    if (!requestTurn(TurnArbiter.TURN_SOURCES.MOUSE).allowed) return false;
     modifierKeyState.rotationContext = createRotationContext(axis, layer, 0);
+    return true;
 }
 
 // Complete face rotation for modifier key mode - snap to nearest 90 degrees.
@@ -1221,8 +1265,8 @@ container.addEventListener('mousedown', (e) => {
                 // Don't start rotation yet - wait for first move
             } else {
                 // For edge cubies, start rotation immediately with clicked face
-                modifierKeyState.cornerRotationStarted = true; // Not a corner/center, mark as started
-                startModifierFaceRotation(faceInfo.axis, faceInfo.layer);
+                modifierKeyState.cornerRotationStarted =
+                    startModifierFaceRotation(faceInfo.axis, faceInfo.layer);
             }
         }
     } else {
@@ -1265,8 +1309,8 @@ container.addEventListener('mousemove', (e) => {
                     // Store selected face in a separate property to avoid mutating original faceInfo
                     
                     // Now start the rotation with the selected face
-                    startModifierFaceRotation(selectedFace.axis, selectedFace.layer);
-                    modifierKeyState.cornerRotationStarted = true;
+                    modifierKeyState.cornerRotationStarted =
+                        startModifierFaceRotation(selectedFace.axis, selectedFace.layer);
                 }
             }
             
@@ -1287,8 +1331,8 @@ container.addEventListener('mousemove', (e) => {
                 // Store selected slice in a separate property
                 
                 // Now start the rotation with the selected slice
-                startModifierFaceRotation(selectedSlice.axis, selectedSlice.layer);
-                modifierKeyState.cornerRotationStarted = true;
+                modifierKeyState.cornerRotationStarted =
+                    startModifierFaceRotation(selectedSlice.axis, selectedSlice.layer);
             }
             
             // Only rotate if the rotation group has been created
@@ -1552,9 +1596,13 @@ function getFaceFromTouch(touch) {
     return null;
 }
 
-// Start face rotation with continuous control
+// Start face rotation with continuous control. Guarded here rather than at
+// each call site so a new one cannot skip the arbiter by forgetting to ask.
+// Returns whether the rotation actually started.
 function startFaceRotation(axis, layer, startAngle = 0) {
+    if (!requestTurn(TurnArbiter.TURN_SOURCES.TOUCH).allowed) return false;
     touchState.rotationContext = createRotationContext(axis, layer, startAngle);
+    return true;
 }
 
 // Complete face rotation - snap to nearest 90 degrees. The context is handed
@@ -1778,12 +1826,19 @@ container.addEventListener('touchstart', (e) => {
             touchState.isLocked = false;
             isDragging = false;
             touchState.initialPinchDistance = getTouchDistance(e.touches[0], e.touches[1]);
+        } else if (!requestTurn(TurnArbiter.TURN_SOURCES.TOUCH).allowed) {
+            // A solve, scramble or step playback owns the cube. Don't lock,
+            // don't highlight, don't start a turn - the sequence keeps running
+            // and the status line says why.
+            touchState.isPinchZoom = false;
+            touchState.isLocked = false;
+            isDragging = false;
         } else {
             // At least one touch is on the cube - enable face swiping
             touchState.isPinchZoom = false;
             touchState.isLocked = true;
             isDragging = false;
-            
+
             // First touch locks the cube
             touchState.lockTouch = {
                 id: e.touches[0].identifier,
@@ -1820,8 +1875,8 @@ container.addEventListener('touchstart', (e) => {
                     // Don't start rotation yet - wait for first move
                 } else {
                     // For edge cubies, start rotation immediately with clicked face
-                    touchState.cornerRotationStarted = true;
-                    startFaceRotation(faceInfo.axis, faceInfo.layer, 0);
+                    touchState.cornerRotationStarted =
+                        startFaceRotation(faceInfo.axis, faceInfo.layer, 0);
                 }
             }
         }
@@ -1900,8 +1955,8 @@ container.addEventListener('touchmove', (e) => {
                         // Store selected face in a separate property to avoid mutating original faceInfo
                         
                         // Now start the rotation with the selected face
-                        startFaceRotation(selectedFace.axis, selectedFace.layer, 0);
-                        touchState.cornerRotationStarted = true;
+                        touchState.cornerRotationStarted =
+                            startFaceRotation(selectedFace.axis, selectedFace.layer, 0);
                     }
                 }
                 
@@ -1922,8 +1977,8 @@ container.addEventListener('touchmove', (e) => {
                     // Store selected slice in a separate property
                     
                     // Now start the rotation with the selected slice
-                    startFaceRotation(selectedSlice.axis, selectedSlice.layer, 0);
-                    touchState.cornerRotationStarted = true;
+                    touchState.cornerRotationStarted =
+                        startFaceRotation(selectedSlice.axis, selectedSlice.layer, 0);
                 }
                 
                 // Only rotate if the rotation group has been created. The
@@ -2051,8 +2106,8 @@ container.addEventListener('touchend', (e) => {
                 if (faceInfo.cubieType === 'corner') {
                     touchState.cornerRotationStarted = false;
                 } else {
-                    touchState.cornerRotationStarted = true;
-                    startFaceRotation(faceInfo.axis, faceInfo.layer, 0);
+                    touchState.cornerRotationStarted =
+                        startFaceRotation(faceInfo.axis, faceInfo.layer, 0);
                 }
             } else {
                 touchState.cornerRotationStarted = false;
@@ -2086,8 +2141,8 @@ container.addEventListener('touchend', (e) => {
                 if (faceInfo.cubieType === 'corner') {
                     touchState.cornerRotationStarted = false;
                 } else {
-                    touchState.cornerRotationStarted = true;
-                    startFaceRotation(faceInfo.axis, faceInfo.layer, 0);
+                    touchState.cornerRotationStarted =
+                        startFaceRotation(faceInfo.axis, faceInfo.layer, 0);
                 }
             } else {
                 touchState.swipeTouch = null;

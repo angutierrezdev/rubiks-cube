@@ -54,6 +54,7 @@ jobs:
           uglifyjs src/strategies/cfopMethodSolver.js -o dist/src/strategies/cfopMethodSolver.js --compress --mangle
           uglifyjs src/controllers/uiController.js -o dist/src/controllers/uiController.js --compress --mangle
           uglifyjs src/controllers/arcballRotation.js -o dist/src/controllers/arcballRotation.js --compress --mangle
+          uglifyjs src/controllers/turnArbiter.js -o dist/src/controllers/turnArbiter.js --compress --mangle
           uglifyjs src/rendering/highlightManager.js -o dist/src/rendering/highlightManager.js --compress --mangle
           uglifyjs src/app.js -o dist/src/app.js --compress --mangle
 
