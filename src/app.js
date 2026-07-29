@@ -806,10 +806,7 @@ let modifierKeyState = {
     swipeStartPos: null,        // Starting position of swipe
     swipeInitialPos: null,      // Initial position for direction detection (corners)
     swipeStartFace: null,       // Face being swiped
-    swipeAxis: null,            // Axis of rotation
-    swipeLayer: null,           // Layer being rotated
-    currentRotation: 0,         // Current rotation angle in radians
-    rotationGroup: null,        // Temporary group for rotation
+    rotationContext: null,      // Live rotation: { group, axis, layer, angle, ... }
     highlightedCubie: null,     // Currently highlighted cubie
     originalMaterials: null,    // Original materials for restoration
     cornerRotationStarted: false, // Whether corner rotation has started (after direction detected)
@@ -886,159 +883,168 @@ function getFaceFromMouse(mouseEvent) {
     return null;
 }
 
-// Start face rotation for modifier key mode
-function startModifierFaceRotation(axis, layer) {
-    if (modifierKeyState.rotationGroup) {
-        cubeGroup.remove(modifierKeyState.rotationGroup);
-    }
-    
-    const faceCubies = getCubiesOnFace(axis, layer);
-    modifierKeyState.rotationGroup = new THREE.Group();
-    cubeGroup.add(modifierKeyState.rotationGroup);
-    
-    faceCubies.forEach(cubie => {
+// ---- Shared face-rotation plumbing (touch and mouse paths) ----
+//
+// A rotation group owns its 6-9 cubies for as long as a face is turning. Two
+// things used to go wrong when a second gesture began before the first had
+// settled: removing the old group from cubeGroup took its cubies out of the
+// scene graph with it, and the snap animation re-read the *live* gesture state
+// on every frame, so it applied the old angle to the new group and recorded a
+// move for the wrong face.
+//
+// Both are fixed the same way: every rotation gets its own context object, and
+// the closure that animates it never looks at anything else.
+
+// Contexts handed off to a snap animation. They are no longer the live gesture
+// but they still own their cubies, so they must be settled before any new
+// group can be built out of those same cubies.
+let pendingSettlements = [];
+
+// A rotation's angle only ever moves through here, so the axis-to-property
+// mapping lives in one place instead of the six switch statements it replaces.
+function applyRotationAngle(ctx, angle) {
+    if (!ctx || !ctx.group) return;
+    ctx.angle = angle;
+    ctx.group.rotation[ctx.axis] = angle;
+}
+
+// Build a rotation group for a face and parent that face's cubies to it.
+// Settles anything still easing first, so those cubies are back under
+// cubeGroup and can be claimed here.
+function createRotationContext(axis, layer, startAngle = 0) {
+    settlePendingRotations();
+
+    const group = new THREE.Group();
+    cubeGroup.add(group);
+
+    getCubiesOnFace(axis, layer).forEach(cubie => {
         const localPos = cubie.position.clone();
         cubeGroup.remove(cubie);
-        modifierKeyState.rotationGroup.add(cubie);
+        group.add(cubie);
         cubie.position.copy(localPos);
     });
-    
-    modifierKeyState.swipeAxis = axis;
-    modifierKeyState.swipeLayer = layer;
-    modifierKeyState.currentRotation = 0;
+
+    const ctx = { group, axis, layer, angle: 0, snapAngle: 0, settled: false };
+    applyRotationAngle(ctx, startAngle);
+    return ctx;
 }
 
-// Update face rotation during mouse drag (modifier key mode)
-function updateModifierFaceRotation(deltaAngle) {
-    if (!modifierKeyState.rotationGroup || modifierKeyState.swipeAxis === null) return;
-    
-    modifierKeyState.currentRotation += deltaAngle;
-    
-    switch (modifierKeyState.swipeAxis) {
-        case 'x':
-            modifierKeyState.rotationGroup.rotation.x = modifierKeyState.currentRotation;
-            break;
-        case 'y':
-            modifierKeyState.rotationGroup.rotation.y = modifierKeyState.currentRotation;
-            break;
-        case 'z':
-            modifierKeyState.rotationGroup.rotation.z = modifierKeyState.currentRotation;
-            break;
-    }
-}
+// Reparent a context's cubies into cubeGroup at snapped grid positions, drop
+// the group, and record the move. Idempotent - a context that already settled
+// is ignored, so a preempted snap animation cannot settle a second time.
+function settleRotationGroup(ctx, finalAngle) {
+    const queued = pendingSettlements.indexOf(ctx);
+    if (queued !== -1) pendingSettlements.splice(queued, 1);
 
-// Complete face rotation for modifier key mode - snap to nearest 90 degrees
-function completeModifierFaceRotation() {
-    if (!modifierKeyState.rotationGroup || modifierKeyState.swipeAxis === null) return;
-    
-    const currentAngle = modifierKeyState.currentRotation;
-    const snapAngle = Math.round(currentAngle / (Math.PI / 2)) * (Math.PI / 2);
-    const remainingAngle = snapAngle - currentAngle;
-    
-    if (Math.abs(remainingAngle) < 0.01) {
-        finalizeModifierFaceRotation(snapAngle);
-    } else {
-        const duration = 200;
-        const startTime = Date.now();
-        const startAngle = currentAngle;
-        
-        function animate() {
-            const elapsed = Date.now() - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-            const eased = 1 - Math.pow(1 - progress, 3);
-            
-            const angle = startAngle + remainingAngle * eased;
-            modifierKeyState.currentRotation = angle;
-            
-            switch (modifierKeyState.swipeAxis) {
-                case 'x':
-                    modifierKeyState.rotationGroup.rotation.x = angle;
-                    break;
-                case 'y':
-                    modifierKeyState.rotationGroup.rotation.y = angle;
-                    break;
-                case 'z':
-                    modifierKeyState.rotationGroup.rotation.z = angle;
-                    break;
-            }
-            
-            if (progress < 1) {
-                requestAnimationFrame(animate);
-            } else {
-                finalizeModifierFaceRotation(snapAngle);
-            }
-        }
-        
-        animate();
-    }
-}
+    if (!ctx || ctx.settled || !ctx.group) return;
+    ctx.settled = true;
 
-// Finalize the rotation for modifier key mode
-function finalizeModifierFaceRotation(finalAngle) {
-    if (!modifierKeyState.rotationGroup || modifierKeyState.swipeAxis === null) return;
-    
-    switch (modifierKeyState.swipeAxis) {
-        case 'x':
-            modifierKeyState.rotationGroup.rotation.x = finalAngle;
-            break;
-        case 'y':
-            modifierKeyState.rotationGroup.rotation.y = finalAngle;
-            break;
-        case 'z':
-            modifierKeyState.rotationGroup.rotation.z = finalAngle;
-            break;
-    }
-    
-    const faceCubies = [];
-    modifierKeyState.rotationGroup.children.forEach(cubie => {
-        faceCubies.push(cubie);
-    });
-    
-    const quarterTurns = Math.round(finalAngle / (Math.PI / 2));
-    
-    faceCubies.forEach(cubie => {
+    applyRotationAngle(ctx, finalAngle);
+
+    ctx.group.children.slice().forEach(cubie => {
         const pos = new THREE.Vector3();
         cubie.getWorldPosition(pos);
         cubeGroup.worldToLocal(pos);
-        
+
         pos.x = Math.round(pos.x / CUBE_TOTAL_SIZE) * CUBE_TOTAL_SIZE;
         pos.y = Math.round(pos.y / CUBE_TOTAL_SIZE) * CUBE_TOTAL_SIZE;
         pos.z = Math.round(pos.z / CUBE_TOTAL_SIZE) * CUBE_TOTAL_SIZE;
-        
+
         const worldQuaternion = new THREE.Quaternion();
         cubie.getWorldQuaternion(worldQuaternion);
-        
-        modifierKeyState.rotationGroup.remove(cubie);
+
+        ctx.group.remove(cubie);
         cubeGroup.add(cubie);
-        
+
         cubie.position.copy(pos);
-        
+
         const cubeGroupWorldQuaternion = new THREE.Quaternion();
         cubeGroup.getWorldQuaternion(cubeGroupWorldQuaternion);
         const invertedQuaternion = cubeGroupWorldQuaternion.clone().invert();
         cubie.quaternion.copy(worldQuaternion).premultiply(invertedQuaternion);
     });
-    
-    cubeGroup.remove(modifierKeyState.rotationGroup);
-    modifierKeyState.rotationGroup = null;
-    
-    // Record the move
+
+    cubeGroup.remove(ctx.group);
+    ctx.group = null;
+
+    // Record the move if it landed on a quarter turn. Normalize to 0-3, where
+    // 2 is a half turn and 3 is a quarter turn the other way.
+    const quarterTurns = Math.round(finalAngle / (Math.PI / 2));
     const normalizedTurns = ((quarterTurns % 4) + 4) % 4;
     if (normalizedTurns === 1) {
-        rubiksCube.recordMove(modifierKeyState.swipeAxis, modifierKeyState.swipeLayer, 1);
+        rubiksCube.recordMove(ctx.axis, ctx.layer, 1);
     } else if (normalizedTurns === 3) {
-        rubiksCube.recordMove(modifierKeyState.swipeAxis, modifierKeyState.swipeLayer, -1);
+        rubiksCube.recordMove(ctx.axis, ctx.layer, -1);
     } else if (normalizedTurns === 2) {
-        rubiksCube.recordMove(modifierKeyState.swipeAxis, modifierKeyState.swipeLayer, 1);
-        rubiksCube.recordMove(modifierKeyState.swipeAxis, modifierKeyState.swipeLayer, 1);
+        rubiksCube.recordMove(ctx.axis, ctx.layer, 1);
+        rubiksCube.recordMove(ctx.axis, ctx.layer, 1);
     }
-    
-    modifierKeyState.swipeAxis = null;
-    modifierKeyState.swipeLayer = null;
-    modifierKeyState.currentRotation = 0;
-    
-    // Update front face indicator after rotation completes
+    // normalizedTurns === 0 means the face came back where it started
+
     updateFrontFaceIndicator();
+}
+
+// Settle every context still easing toward its snap angle, at that snap angle
+// rather than wherever the ease happens to be, so the cube stays on the grid.
+function settlePendingRotations() {
+    const easing = pendingSettlements.slice();
+    pendingSettlements.length = 0;
+    easing.forEach(ctx => settleRotationGroup(ctx, ctx.snapAngle));
+}
+
+// Ease a rotation to its nearest quarter turn, then settle it. The context is
+// captured here rather than read from the live gesture state, so a gesture
+// that starts mid-ease can never be finalized with this rotation's angle.
+function animateSnapToQuarterTurn(ctx) {
+    if (!ctx || !ctx.group) return;
+
+    const startAngle = ctx.angle;
+    const snapAngle = Math.round(startAngle / (Math.PI / 2)) * (Math.PI / 2);
+    const remainingAngle = snapAngle - startAngle;
+    ctx.snapAngle = snapAngle;
+
+    if (Math.abs(remainingAngle) < 0.01) {
+        settleRotationGroup(ctx, snapAngle);
+        return;
+    }
+
+    pendingSettlements.push(ctx);
+
+    const duration = 200;
+    const startTime = Date.now();
+
+    function animate() {
+        // A new gesture may have settled this context out from under us.
+        if (ctx.settled) return;
+
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+
+        applyRotationAngle(ctx, startAngle + remainingAngle * eased);
+
+        if (progress < 1) {
+            requestAnimationFrame(animate);
+        } else {
+            settleRotationGroup(ctx, snapAngle);
+        }
+    }
+
+    animate();
+}
+
+// Start face rotation for modifier key mode
+function startModifierFaceRotation(axis, layer) {
+    modifierKeyState.rotationContext = createRotationContext(axis, layer, 0);
+}
+
+// Complete face rotation for modifier key mode - snap to nearest 90 degrees.
+// The context is handed to the animation and cleared here, so the next gesture
+// starts from a clean slate even while this one is still easing.
+function completeModifierFaceRotation() {
+    const ctx = modifierKeyState.rotationContext;
+    modifierKeyState.rotationContext = null;
+    animateSnapToQuarterTurn(ctx);
 }
 
 // Highlight a cubie for modifier key mode
@@ -1288,33 +1294,18 @@ container.addEventListener('mousemove', (e) => {
                 modifierKeyState.cornerRotationStarted = true;
             }
             
-            // Only rotate if rotation group has been created
-            if (modifierKeyState.rotationGroup) {
-                // Use selected axis/layer for corners/centers, original for others
-                const rotationAxis = modifierKeyState.selectedAxis || faceInfo.axis;
-                const rotationLayer = modifierKeyState.selectedLayer || faceInfo.layer;
-                
+            // Only rotate if the rotation group has been created
+            const ctx = modifierKeyState.rotationContext;
+            if (ctx) {
                 const deltaAngle = calculateModifierRotationAngle(
-                    deltaX, 
-                    deltaY, 
-                    rotationAxis, 
-                    rotationLayer, 
+                    deltaX,
+                    deltaY,
+                    ctx.axis,
+                    ctx.layer,
                     faceInfo.cubiePos
                 );
-                
-                modifierKeyState.currentRotation += deltaAngle;
-                
-                switch (rotationAxis) {
-                    case 'x':
-                        modifierKeyState.rotationGroup.rotation.x = modifierKeyState.currentRotation;
-                        break;
-                    case 'y':
-                        modifierKeyState.rotationGroup.rotation.y = modifierKeyState.currentRotation;
-                        break;
-                    case 'z':
-                        modifierKeyState.rotationGroup.rotation.z = modifierKeyState.currentRotation;
-                        break;
-                }
+
+                applyRotationAngle(ctx, ctx.angle + deltaAngle);
             }
         }
         
@@ -1334,7 +1325,7 @@ container.addEventListener('mousemove', (e) => {
 container.addEventListener('mouseup', () => {
     if (modifierKeyState.isLocked) {
         // Complete face rotation if we were in modifier key mode
-        if (modifierKeyState.rotationGroup) {
+        if (modifierKeyState.rotationContext) {
             completeModifierFaceRotation();
         }
         modifierKeyState.isLocked = false;
@@ -1354,7 +1345,7 @@ container.addEventListener('mouseup', () => {
 
 container.addEventListener('mouseleave', () => {
     if (modifierKeyState.isLocked) {
-        if (modifierKeyState.rotationGroup) {
+        if (modifierKeyState.rotationContext) {
             completeModifierFaceRotation();
         }
         modifierKeyState.isLocked = false;
@@ -1381,11 +1372,8 @@ let touchState = {
     swipeStartPos: null,  // Starting position of swipe (initial)
     swipeInitialPos: null, // Initial touch position (for total distance calculation)
     swipeStartFace: null, // Face being swiped
-    swipeAxis: null,      // Axis of rotation
-    swipeLayer: null,     // Layer being rotated
     swipeDirection: null, // Direction of swipe
-    currentRotation: 0,   // Current rotation angle in radians
-    rotationGroup: null,  // Temporary group for rotation
+    rotationContext: null, // Live rotation: { group, axis, layer, angle, ... }
     highlightedCubie: null, // Currently highlighted cubie
     originalMaterials: null, // Original materials for restoration
     cornerRotationStarted: false, // Whether corner rotation has started (after direction detected)
@@ -1575,184 +1563,16 @@ function getFaceFromTouch(touch) {
 
 // Start face rotation with continuous control
 function startFaceRotation(axis, layer, startAngle = 0) {
-    if (touchState.rotationGroup) {
-        // Clean up existing rotation group
-        cubeGroup.remove(touchState.rotationGroup);
-    }
-    
-    const faceCubies = getCubiesOnFace(axis, layer);
-    touchState.rotationGroup = new THREE.Group();
-    cubeGroup.add(touchState.rotationGroup);
-    
-    faceCubies.forEach(cubie => {
-        const localPos = cubie.position.clone();
-        cubeGroup.remove(cubie);
-        touchState.rotationGroup.add(cubie);
-        cubie.position.copy(localPos);
-    });
-    
-    touchState.swipeAxis = axis;
-    touchState.swipeLayer = layer;
-    touchState.currentRotation = startAngle;
-    
-    // Set initial rotation
-    switch (axis) {
-        case 'x':
-            touchState.rotationGroup.rotation.x = startAngle;
-            break;
-        case 'y':
-            touchState.rotationGroup.rotation.y = startAngle;
-            break;
-        case 'z':
-            touchState.rotationGroup.rotation.z = startAngle;
-            break;
-    }
+    touchState.rotationContext = createRotationContext(axis, layer, startAngle);
 }
 
-// Update face rotation during swipe
-function updateFaceRotation(deltaAngle) {
-    if (!touchState.rotationGroup || touchState.swipeAxis === null) return;
-    
-    touchState.currentRotation += deltaAngle;
-    
-    switch (touchState.swipeAxis) {
-        case 'x':
-            touchState.rotationGroup.rotation.x = touchState.currentRotation;
-            break;
-        case 'y':
-            touchState.rotationGroup.rotation.y = touchState.currentRotation;
-            break;
-        case 'z':
-            touchState.rotationGroup.rotation.z = touchState.currentRotation;
-            break;
-    }
-}
-
-// Complete face rotation - snap to nearest 90 degrees
+// Complete face rotation - snap to nearest 90 degrees. The context is handed
+// to the animation and cleared here, so the next gesture starts from a clean
+// slate even while this one is still easing.
 function completeFaceRotation() {
-    if (!touchState.rotationGroup || touchState.swipeAxis === null) return;
-    
-    const currentAngle = touchState.currentRotation;
-    // Snap to nearest 90 degrees (π/2)
-    const snapAngle = Math.round(currentAngle / (Math.PI / 2)) * (Math.PI / 2);
-    const remainingAngle = snapAngle - currentAngle;
-    
-    if (Math.abs(remainingAngle) < 0.01) {
-        // Already at snap position, just finalize
-        finalizeFaceRotation(snapAngle);
-    } else {
-        // Animate to snap position
-        const duration = 200;
-        const startTime = Date.now();
-        const startAngle = currentAngle;
-        
-        function animate() {
-            const elapsed = Date.now() - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-            const eased = 1 - Math.pow(1 - progress, 3);
-            
-            const angle = startAngle + remainingAngle * eased;
-            touchState.currentRotation = angle;
-            
-            switch (touchState.swipeAxis) {
-                case 'x':
-                    touchState.rotationGroup.rotation.x = angle;
-                    break;
-                case 'y':
-                    touchState.rotationGroup.rotation.y = angle;
-                    break;
-                case 'z':
-                    touchState.rotationGroup.rotation.z = angle;
-                    break;
-            }
-            
-            if (progress < 1) {
-                requestAnimationFrame(animate);
-            } else {
-                finalizeFaceRotation(snapAngle);
-            }
-        }
-        
-        animate();
-    }
-}
-
-// Finalize the rotation and update cubie positions
-function finalizeFaceRotation(finalAngle) {
-    if (!touchState.rotationGroup || touchState.swipeAxis === null) return;
-    
-    // Apply final rotation to the group
-    switch (touchState.swipeAxis) {
-        case 'x':
-            touchState.rotationGroup.rotation.x = finalAngle;
-            break;
-        case 'y':
-            touchState.rotationGroup.rotation.y = finalAngle;
-            break;
-        case 'z':
-            touchState.rotationGroup.rotation.z = finalAngle;
-            break;
-    }
-    
-    const faceCubies = [];
-    touchState.rotationGroup.children.forEach(cubie => {
-        faceCubies.push(cubie);
-    });
-    
-    // Calculate how many quarter turns this represents
-    const quarterTurns = Math.round(finalAngle / (Math.PI / 2));
-    
-    // Update cubie positions
-    faceCubies.forEach(cubie => {
-        const pos = new THREE.Vector3();
-        cubie.getWorldPosition(pos);
-        cubeGroup.worldToLocal(pos);
-        
-        // Round to nearest grid position
-        pos.x = Math.round(pos.x / CUBE_TOTAL_SIZE) * CUBE_TOTAL_SIZE;
-        pos.y = Math.round(pos.y / CUBE_TOTAL_SIZE) * CUBE_TOTAL_SIZE;
-        pos.z = Math.round(pos.z / CUBE_TOTAL_SIZE) * CUBE_TOTAL_SIZE;
-        
-        const worldQuaternion = new THREE.Quaternion();
-        cubie.getWorldQuaternion(worldQuaternion);
-        
-        touchState.rotationGroup.remove(cubie);
-        cubeGroup.add(cubie);
-        
-        cubie.position.copy(pos);
-        
-        const cubeGroupWorldQuaternion = new THREE.Quaternion();
-        cubeGroup.getWorldQuaternion(cubeGroupWorldQuaternion);
-        const invertedQuaternion = cubeGroupWorldQuaternion.clone().invert();
-        cubie.quaternion.copy(worldQuaternion).premultiply(invertedQuaternion);
-    });
-    
-    cubeGroup.remove(touchState.rotationGroup);
-    touchState.rotationGroup = null;
-    
-    // Record the move if it was a full quarter turn
-    // Normalize quarterTurns to -1, 0, 1, 2, 3 (where 2 = 180°, 3 = -90°)
-    const normalizedTurns = ((quarterTurns % 4) + 4) % 4;
-    if (normalizedTurns === 1) {
-        // 90° rotation
-        rubiksCube.recordMove(touchState.swipeAxis, touchState.swipeLayer, 1);
-    } else if (normalizedTurns === 3) {
-        // 270° rotation = -90° rotation
-        rubiksCube.recordMove(touchState.swipeAxis, touchState.swipeLayer, -1);
-    } else if (normalizedTurns === 2) {
-        // 180° rotation = two 90° rotations
-        rubiksCube.recordMove(touchState.swipeAxis, touchState.swipeLayer, 1);
-        rubiksCube.recordMove(touchState.swipeAxis, touchState.swipeLayer, 1);
-    }
-    // normalizedTurns === 0 means no rotation, so no move recorded
-    
-    // Reset state
-    touchState.swipeAxis = null;
-    touchState.swipeLayer = null;
-    touchState.currentRotation = 0;
-    
-    // Update front face indicator after rotation completes
-    updateFrontFaceIndicator();
+    const ctx = touchState.rotationContext;
+    touchState.rotationContext = null;
+    animateSnapToQuarterTurn(ctx);
 }
 
 // Calculate swipe direction relative to face
@@ -2121,36 +1941,23 @@ container.addEventListener('touchmove', (e) => {
                     touchState.cornerRotationStarted = true;
                 }
                 
-                // Only rotate if rotation group has been created
-                if (touchState.rotationGroup) {
-                    // Use selected axis/layer for corners/centers, original for others
-                    const rotationAxis = touchState.selectedAxis || faceInfo.axis;
-                    const rotationLayer = touchState.selectedLayer || faceInfo.layer;
-                    
+                // Only rotate if the rotation group has been created. The
+                // context carries the axis and layer the group was actually
+                // built from, which is what must drive the angle.
+                const ctx = touchState.rotationContext;
+                if (ctx) {
                     // Calculate incremental angle using proper 3D geometry
                     // This works for all faces and all positions on each face
                     const deltaAngle = calculateTouchRotationAngle(
-                        deltaX, 
-                        deltaY, 
-                        rotationAxis, 
-                        rotationLayer, 
+                        deltaX,
+                        deltaY,
+                        ctx.axis,
+                        ctx.layer,
                         faceInfo.cubiePos
                     );
-                    
+
                     // Accumulate rotation incrementally
-                    touchState.currentRotation += deltaAngle;
-                    
-                    switch (rotationAxis) {
-                        case 'x':
-                            touchState.rotationGroup.rotation.x = touchState.currentRotation;
-                            break;
-                        case 'y':
-                            touchState.rotationGroup.rotation.y = touchState.currentRotation;
-                            break;
-                        case 'z':
-                            touchState.rotationGroup.rotation.z = touchState.currentRotation;
-                            break;
-                    }
+                    applyRotationAngle(ctx, ctx.angle + deltaAngle);
                 }
             }
             
@@ -2172,7 +1979,7 @@ container.addEventListener('touchend', (e) => {
         touchState.isPinchZoom = false;
         touchState.initialPinchDistance = null;
         
-        if (touchState.swipeTouch && touchState.rotationGroup) {
+        if (touchState.swipeTouch && touchState.rotationContext) {
             // Complete the face rotation
             completeFaceRotation();
         }
@@ -2198,7 +2005,7 @@ container.addEventListener('touchend', (e) => {
         
         if (touchState.lockTouch && remainingId === touchState.lockTouch.id) {
             // Lock touch remains, swipe ended
-            if (touchState.rotationGroup) {
+            if (touchState.rotationContext) {
                 completeFaceRotation();
             }
             touchState.swipeTouch = null;
@@ -2223,7 +2030,7 @@ container.addEventListener('touchend', (e) => {
             touchState.cornerRotationStarted = false;
         touchState.selectedAxis = null;
         touchState.selectedLayer = null;
-            if (touchState.rotationGroup) {
+            if (touchState.rotationContext) {
                 completeFaceRotation();
             }
             touchState.isLocked = false;
@@ -2249,7 +2056,7 @@ container.addEventListener('touchend', (e) => {
             const newSwipeTouch = e.touches[touchIds.indexOf(touchState.swipeTouch.id)];
             const faceInfo = getFaceFromTouch(newSwipeTouch);
             if (faceInfo) {
-                if (touchState.rotationGroup) {
+                if (touchState.rotationContext) {
                     completeFaceRotation();
                 }
                 const initialPos = {
@@ -2278,7 +2085,7 @@ container.addEventListener('touchend', (e) => {
             }
         } else if (touchState.swipeTouch && !touchIds.includes(touchState.swipeTouch.id)) {
             // Swipe touch ended
-            if (touchState.rotationGroup) {
+            if (touchState.rotationContext) {
                 completeFaceRotation();
             }
             touchState.swipeTouch = {
