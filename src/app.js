@@ -247,6 +247,9 @@ const TANGENT_ALIGNMENT_THRESHOLD = 0.1;
 const TOUCH_ROTATION_SCALE = 2.0;
 const MIN_SWIPE_THRESHOLD = 1;
 
+// 3x3x3, including the core cubie that is never visible
+const EXPECTED_CUBIE_COUNT = 27;
+
 // Reusable object for cube orbit rotation to avoid creating new objects on every move
 const arcballDeltaQuaternion = new THREE.Quaternion();
 
@@ -2144,9 +2147,39 @@ window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
+// Every cubie must be reachable from cubeGroup, whether parented to it
+// directly or to a rotation group beneath it. A cubie that falls out of the
+// scene graph renders as nothing, which is what the two-finger turn bug looked
+// like from the outside.
+//
+// This deliberately only reports. An orphaned cubie sits at whatever partial
+// angle it was abandoned at, so healing it would mean inventing a final angle
+// and baking that guess into the mesh - which can leave the logical cube state
+// disagreeing with what is drawn. A cube that looks right while the solver
+// believes something else produces a solution that does not match the screen:
+// a quiet correctness bug, strictly worse than a loud rendering one.
+let invariantAlreadyReported = false;
+function checkCubieInvariant() {
+    if (invariantAlreadyReported) return;
+
+    let reachable = 0;
+    cubeGroup.traverse(object => { if (object.isMesh) reachable++; });
+    if (reachable === EXPECTED_CUBIE_COUNT) return;
+
+    invariantAlreadyReported = true;
+    console.error(
+        `[cube] scene graph invariant violated: ${reachable} of ${EXPECTED_CUBIE_COUNT} cubies ` +
+        `reachable from cubeGroup. Active rotation paths: ` +
+        `touch=${!!touchState.rotationContext}, mouse=${!!modifierKeyState.rotationContext}, ` +
+        `settling=${pendingSettlements.length}, programmatic=${rubiksCube.getIsAnimating()}. ` +
+        `Reported once per session; the cube is not self-healed.`
+    );
+}
+
 // Animation loop
 function render() {
     requestAnimationFrame(render);
+    checkCubieInvariant();
     renderer.render(scene, camera);
 }
 
