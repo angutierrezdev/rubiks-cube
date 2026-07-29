@@ -377,6 +377,15 @@ button:disabled {
     margin-bottom: 5px;
     font-size: 0.9375rem;
 }
+/* Build identifier, set from version.js. Divided off from the help text since
+   it is reference rather than instruction, but kept at the same size and
+   opacity as the rest of the panel - it is the first thing anyone is asked for
+   in a bug report, so it has to stay legible. */
+#instructions #app-version {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
 
 /* Front face indicator */
 #front-face-indicator {

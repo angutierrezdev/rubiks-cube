@@ -78,6 +78,11 @@ jobs:
       - name: Copy service worker
         run: cp sw.js dist/sw.js
 
+      # Not minified: sw.js pulls it in with importScripts and the page reads
+      # the same global, so the identifier must survive verbatim.
+      - name: Copy version
+        run: cp version.js dist/version.js
+
       - name: Copy favicon
         run: |
           cp images/favicon.ico dist/images/favicon.ico
