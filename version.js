@@ -5,7 +5,7 @@
 // the page and the service worker can disagree about the version, the worker
 // keeps serving a cache it believes is current and users never see the build
 // they are looking at.
-const APP_VERSION = '1.7.3';
+const APP_VERSION = '1.8.0';
 
 // Export for use in other scripts
 if (typeof window !== 'undefined') {
